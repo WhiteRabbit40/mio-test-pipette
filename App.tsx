@@ -25,9 +25,9 @@ const App: React.FC = () => {
             Per proteggere i tuoi dati, l'app è stata oscurata.
           </p>
           <div className="bg-slate-900 p-4 rounded-xl text-left mb-6 font-mono text-xs text-violet-400 border border-slate-700">
-            1. Vai su Vercel Dashboard<br/>
-            2. Settings > Environment Variables<br/>
-            3. Aggiungi VITE_SUPABASE_URL<br/>
+            1. Vai su Vercel Dashboard<br />
+            2. Settings &gt; Environment Variables<br />
+            3. Aggiungi VITE_SUPABASE_URL<br />
             4. Aggiungi VITE_SUPABASE_ANON_KEY
           </div>
           <button 
