@@ -1,4 +1,6 @@
 
+import { PipetteType } from './types';
+
 export const INITIAL_MEASUREMENTS_FIXED = Array(10).fill('');
 export const INITIAL_MEASUREMENTS_VAR = Array(10).fill('');
 
@@ -10,27 +12,27 @@ export const LOGO_BASE64 = "";
 // Common Pipette Presets for Quick Fill (Generic Volumes Only)
 export const PIPETTE_PRESETS = [
   // --- VARIABLE VOLUMES ---
-  { name: "Variabile 0.2 - 2 µl", manufacturer: "", model: "", nominalVolume: "2", type: "VARIABLE" },
-  { name: "Variabile 1 - 10 µl", manufacturer: "", model: "", nominalVolume: "10", type: "VARIABLE" },
-  { name: "Variabile 2 - 20 µl", manufacturer: "", model: "", nominalVolume: "20", type: "VARIABLE" },
-  { name: "Variabile 10 - 100 µl", manufacturer: "", model: "", nominalVolume: "100", type: "VARIABLE" },
-  { name: "Variabile 20 - 200 µl", manufacturer: "", model: "", nominalVolume: "200", type: "VARIABLE" },
-  { name: "Variabile 100 - 1000 µl", manufacturer: "", model: "", nominalVolume: "1000", type: "VARIABLE" },
-  { name: "Variabile 0.5 - 5 ml", manufacturer: "", model: "", nominalVolume: "5000", type: "VARIABLE" },
-  { name: "Variabile 1 - 10 ml", manufacturer: "", model: "", nominalVolume: "10000", type: "VARIABLE" },
+  { name: "Variabile 0.2 - 2 µl", manufacturer: "", model: "", nominalVolume: "2", type: PipetteType.VARIABLE },
+  { name: "Variabile 1 - 10 µl", manufacturer: "", model: "", nominalVolume: "10", type: PipetteType.VARIABLE },
+  { name: "Variabile 2 - 20 µl", manufacturer: "", model: "", nominalVolume: "20", type: PipetteType.VARIABLE },
+  { name: "Variabile 10 - 100 µl", manufacturer: "", model: "", nominalVolume: "100", type: PipetteType.VARIABLE },
+  { name: "Variabile 20 - 200 µl", manufacturer: "", model: "", nominalVolume: "200", type: PipetteType.VARIABLE },
+  { name: "Variabile 100 - 1000 µl", manufacturer: "", model: "", nominalVolume: "1000", type: PipetteType.VARIABLE },
+  { name: "Variabile 0.5 - 5 ml", manufacturer: "", model: "", nominalVolume: "5000", type: PipetteType.VARIABLE },
+  { name: "Variabile 1 - 10 ml", manufacturer: "", model: "", nominalVolume: "10000", type: PipetteType.VARIABLE },
   
   // --- FIXED VOLUMES ---
-  { name: "Fissa 10 µl", manufacturer: "", model: "", nominalVolume: "10", type: "FIXED" },
-  { name: "Fissa 20 µl", manufacturer: "", model: "", nominalVolume: "20", type: "FIXED" },
-  { name: "Fissa 50 µl", manufacturer: "", model: "", nominalVolume: "50", type: "FIXED" },
-  { name: "Fissa 100 µl", manufacturer: "", model: "", nominalVolume: "100", type: "FIXED" },
-  { name: "Fissa 200 µl", manufacturer: "", model: "", nominalVolume: "200", type: "FIXED" },
-  { name: "Fissa 500 µl", manufacturer: "", model: "", nominalVolume: "500", type: "FIXED" },
-  { name: "Fissa 1000 µl (1 ml)", manufacturer: "", model: "", nominalVolume: "1000", type: "FIXED" },
-  { name: "Fissa 2000 µl (2 ml)", manufacturer: "", model: "", nominalVolume: "2000", type: "FIXED" },
-  { name: "Fissa 2500 µl (2.5 ml)", manufacturer: "", model: "", nominalVolume: "2500", type: "FIXED" },
-  { name: "Fissa 5000 µl (5 ml)", manufacturer: "", model: "", nominalVolume: "5000", type: "FIXED" },
-  { name: "Fissa 10000 µl (10 ml)", manufacturer: "", model: "", nominalVolume: "10000", type: "FIXED" },
+  { name: "Fissa 10 µl", manufacturer: "", model: "", nominalVolume: "10", type: PipetteType.FIXED },
+  { name: "Fissa 20 µl", manufacturer: "", model: "", nominalVolume: "20", type: PipetteType.FIXED },
+  { name: "Fissa 50 µl", manufacturer: "", model: "", nominalVolume: "50", type: PipetteType.FIXED },
+  { name: "Fissa 100 µl", manufacturer: "", model: "", nominalVolume: "100", type: PipetteType.FIXED },
+  { name: "Fissa 200 µl", manufacturer: "", model: "", nominalVolume: "200", type: PipetteType.FIXED },
+  { name: "Fissa 500 µl", manufacturer: "", model: "", nominalVolume: "500", type: PipetteType.FIXED },
+  { name: "Fissa 1000 µl (1 ml)", manufacturer: "", model: "", nominalVolume: "1000", type: PipetteType.FIXED },
+  { name: "Fissa 2000 µl (2 ml)", manufacturer: "", model: "", nominalVolume: "2000", type: PipetteType.FIXED },
+  { name: "Fissa 2500 µl (2.5 ml)", manufacturer: "", model: "", nominalVolume: "2500", type: PipetteType.FIXED },
+  { name: "Fissa 5000 µl (5 ml)", manufacturer: "", model: "", nominalVolume: "5000", type: PipetteType.FIXED },
+  { name: "Fissa 10000 µl (10 ml)", manufacturer: "", model: "", nominalVolume: "10000", type: PipetteType.FIXED },
 ];
 
 // ISO Tolerance Lookup Table (Based on user provided image)
