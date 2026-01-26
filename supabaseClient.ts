@@ -2,14 +2,21 @@
 import { createClient } from '@supabase/supabase-js';
 
 /**
- * Per la pubblicazione (Production), utilizziamo le variabili d'ambiente.
- * Se stai usando Vite, queste devono iniziare con VITE_.
- * Se le variabili non sono impostate (sviluppo locale), usiamo i valori di default come fallback.
+ * Accediamo alle variabili d'ambiente fornite dal sistema di build (es. Vite o Vercel).
+ * Non scriviamo mai le chiavi reali qui dentro per motivi di sicurezza.
  */
 
+const supabaseUrl = (process.env as any).VITE_SUPABASE_URL;
+const supabaseAnonKey = (process.env as any).VITE_SUPABASE_ANON_KEY;
 
-// Fix: Property 'env' does not exist on type 'ImportMeta'. Accessing via process.env as per environment guidelines.
-const supabaseUrl = (process.env as any).VITE_SUPABASE_URL || 'https://pbmcfupdbtorbnrbicda.supabase.co';
-const supabaseAnonKey = (process.env as any).VITE_SUPABASE_ANON_KEY || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InBibWNmdXBkYnRvcmJucmJpY2RhIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjQ1ODM2ODAsImV4cCI6MjA4MDE1OTY4MH0.fVYTn2iDfaL1KL6iglXckP6gCgFJu9P8sN1YrwL_ZOA';
+if (!supabaseUrl || !supabaseAnonKey) {
+  console.warn(
+    "Attenzione: Le chiavi di Supabase non sono state trovate nelle variabili d'ambiente. " +
+    "Assicurati di aver configurato VITE_SUPABASE_URL e VITE_SUPABASE_ANON_KEY."
+  );
+}
 
-export const supabase = createClient(supabaseUrl, supabaseAnonKey);
+export const supabase = createClient(
+  supabaseUrl || '', 
+  supabaseAnonKey || ''
+);
