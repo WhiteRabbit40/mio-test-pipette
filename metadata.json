@@ -1,0 +1,5 @@
+{
+  "name": "PipetteCal - Certificazione Taratura",
+  "description": "Webapp professionale per la generazione di report PDF di taratura pipette (fisse e variabili) con calcolo automatico dei volumi e statistiche.",
+  "requestFramePermissions": []
+}
