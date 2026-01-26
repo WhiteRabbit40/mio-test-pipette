@@ -95,8 +95,6 @@ const App: React.FC = () => {
   const [storedPipettes, setStoredPipettes] = useState<StoredPipette[]>([]);
   const [isLoadingDb, setIsLoadingDb] = useState(false);
   const [isSavingDb, setIsSavingDb] = useState(false);
-  const [clientSearchTerm, setClientSearchTerm] = useState('');
-  const [pipetteSearchTerm, setPipetteSearchTerm] = useState('');
   const [selectedPresetName, setSelectedPresetName] = useState<string>("");
   const [showDbModal, setShowDbModal] = useState(false);
   const [showPdfConfigModal, setShowPdfConfigModal] = useState(false);
@@ -124,6 +122,33 @@ const App: React.FC = () => {
   useEffect(() => { if (session) fetchClients(); }, [session]);
   useEffect(() => { if (session && selectedClientId) { fetchPipettes(selectedClientId); } }, [session, selectedClientId]);
 
+  // Funzione centralizzata per ottenere le tolleranze ISO
+  // FIX: Added explicit return type to resolve type incompatibility errors with state updates where number | "" is expected.
+  const getIsoLimits = (nominal: string, unit: 'ul' | 'ml'): { sys: number | ''; rand: number | '' } => {
+    if (!nominal) return { sys: '', rand: '' };
+    let vol = parseFloat(nominal);
+    if (isNaN(vol)) return { sys: '', rand: '' };
+    if (unit === 'ml') vol = vol * 1000;
+    const match = ISO_TOLERANCES_DATA.find(iso => iso.vol === vol);
+    return match ? { sys: match.sys, rand: match.rand } : { sys: '', rand: '' };
+  };
+
+  // Effetto per aggiornare le tolleranze quando cambia il volume
+  useEffect(() => {
+    const limits = getIsoLimits(data.nominalVolume, data.nominalVolumeUnit);
+    if (limits.sys !== '' || limits.rand !== '') {
+      setData(prev => {
+        // Aggiorniamo solo se diversi o se i campi attuali sono vuoti
+        if (prev.toleranceSystematic === limits.sys && prev.toleranceRandom === limits.rand) return prev;
+        return { 
+          ...prev, 
+          toleranceSystematic: limits.sys, 
+          toleranceRandom: limits.rand 
+        };
+      });
+    }
+  }, [data.nominalVolume, data.nominalVolumeUnit]);
+
   useEffect(() => {
     if (data.zFactorMethod === 'ISO_WATER') {
       if (typeof data.temperature === 'number' && typeof data.pressure === 'number') {
@@ -141,15 +166,6 @@ const App: React.FC = () => {
       setData(prev => ({ ...prev, nextCalibrationDate: date.toISOString().split('T')[0] }));
     }
   }, [data.testDate, data.calibrationFrequencyMonths]);
-
-  useEffect(() => {
-    if (!data.nominalVolume) return;
-    let vol = parseFloat(data.nominalVolume);
-    if (isNaN(vol)) return;
-    if (data.nominalVolumeUnit === 'ml') vol = vol * 1000;
-    const match = ISO_TOLERANCES_DATA.find(iso => iso.vol === vol);
-    if (match) setData(prev => ({ ...prev, toleranceSystematic: match.sys, toleranceRandom: match.rand }));
-  }, [data.nominalVolume, data.nominalVolumeUnit]);
 
   useEffect(() => {
     if (notification?.visible) {
@@ -187,7 +203,20 @@ const App: React.FC = () => {
     } catch (error: any) { showNotification("Errore salvataggio", "error"); } finally { setIsSavingDb(false); }
   };
 
-  const handleLoadFromDb = (p: StoredPipette) => { setData(p.full_data); showNotification("Dati caricati", "success"); setShowDbModal(false); };
+  const handleLoadFromDb = (p: StoredPipette) => {
+    // Quando carichiamo, verifichiamo se mancano le tolleranze nei dati salvati
+    let loadedData = { ...p.full_data };
+    if (!loadedData.toleranceSystematic || !loadedData.toleranceRandom) {
+      const limits = getIsoLimits(loadedData.nominalVolume, loadedData.nominalVolumeUnit);
+      if (limits.sys !== '') {
+        loadedData.toleranceSystematic = limits.sys;
+        loadedData.toleranceRandom = limits.rand;
+      }
+    }
+    setData(loadedData);
+    showNotification("Dati caricati", "success");
+    setShowDbModal(false);
+  };
 
   const showNotification = (msg: string, type: 'success' | 'error') => setNotification({ message: msg, type, visible: true });
   const updateMeasurement = (type: 'fixed' | 'min' | 'mid' | 'max', index: number, value: string) => {
@@ -203,7 +232,16 @@ const App: React.FC = () => {
   };
 
   const applyPreset = (p: any) => {
-    setData(prev => ({ ...prev, ...p, name: undefined }));
+    // Applichiamo il preset e forziamo il ricalcolo tolleranze se mancanti
+    const limits = getIsoLimits(p.nominalVolume, p.nominalVolumeUnit || 'ul');
+    // FIX: Cast tolerance results to 'number | ""' to avoid TS error with string literal inference in the state union type.
+    setData(prev => ({ 
+      ...prev, 
+      ...p, 
+      toleranceSystematic: (limits.sys || prev.toleranceSystematic) as number | '',
+      toleranceRandom: (limits.rand || prev.toleranceRandom) as number | '',
+      name: undefined 
+    }));
     showNotification(`Dati "${p.name}" caricati`, "success");
   };
 
@@ -286,8 +324,13 @@ const App: React.FC = () => {
           <div className="bg-slate-800/50 p-6 rounded-2xl border border-slate-700/50 shadow-xl">
              <h2 className="text-rose-400 text-sm font-bold uppercase tracking-wider mb-4 flex items-center gap-2"><Gauge size={16} /> Tolleranze ISO (µl)</h2>
              <div className="grid grid-cols-2 gap-4">
-              <InputGroup label="Sistematico (E)" value={data.toleranceSystematic} onChange={(e) => setData({ ...data, toleranceSystematic: parseFloat(e.target.value) || '' })} type="number" />
-              <InputGroup label="Casuale (SD)" value={data.toleranceRandom} onChange={(e) => setData({ ...data, toleranceRandom: parseFloat(e.target.value) || '' })} type="number" />
+              {/* FIX: Explicitly cast tolerance updates to 'number | ""' to resolve TS error with string literal inference being interpreted as 'string' instead of '""' */}
+              <InputGroup label="Sistematico (E)" value={data.toleranceSystematic} onChange={(e) => setData({ ...data, toleranceSystematic: (e.target.value === '' ? '' : parseFloat(e.target.value)) as number | '' })} type="number" />
+              <InputGroup label="Casuale (SD)" value={data.toleranceRandom} onChange={(e) => setData({ ...data, toleranceRandom: (e.target.value === '' ? '' : parseFloat(e.target.value)) as number | '' })} type="number" />
+            </div>
+            <div className="mt-4 p-2 bg-slate-900/40 rounded-lg border border-slate-700/50 flex items-center gap-2">
+               <div className="w-2 h-2 rounded-full bg-violet-500 animate-pulse"></div>
+               <span className="text-[10px] text-slate-500 font-medium">Auto-fill ISO attivo per volumi standard</span>
             </div>
           </div>
         </div>
@@ -298,17 +341,18 @@ const App: React.FC = () => {
                <InputGroup className="w-40" label="Data Test" value={data.testDate} onChange={(e) => setData({ ...data, testDate: e.target.value })} type="date" />
                <div className="w-32"><InputGroup label="Freq (Mesi)" value={data.calibrationFrequencyMonths} onChange={(e) => setData({ ...data, calibrationFrequencyMonths: parseInt(e.target.value) || 12 })} type="number" /></div>
                <div className="flex-1 flex items-end justify-end gap-3">
-                  <button onClick={handleLocalSave} className="p-3 bg-slate-800 hover:bg-slate-700 text-indigo-400 rounded-xl border border-slate-700 flex items-center gap-2 font-bold"><Save size={20} /><span className="hidden sm:inline">Salva Locale</span></button>
-                  <button onClick={() => generatePDF(data)} className="flex items-center gap-2 bg-violet-600 hover:bg-violet-500 text-white px-6 py-3 rounded-xl font-bold transition-all"><FileText size={20} /> Genera PDF</button>
+                  <button onClick={handleLocalSave} className="p-3 bg-slate-800 hover:bg-slate-700 text-indigo-400 rounded-xl border border-slate-700 flex items-center gap-2 font-bold transition-all hover:scale-105 active:scale-95"><Save size={20} /><span className="hidden sm:inline">Salva Locale</span></button>
+                  <button onClick={() => generatePDF(data)} className="flex items-center gap-2 bg-violet-600 hover:bg-violet-500 text-white px-6 py-3 rounded-xl font-bold transition-all shadow-lg hover:shadow-violet-500/20 active:translate-y-0.5"><FileText size={20} /> Genera PDF</button>
                </div>
             </div>
             <div className="mb-8 p-4 bg-slate-800/50 rounded-xl border border-slate-700">
                <h3 className="text-emerald-400 text-sm font-bold uppercase tracking-wider mb-4 flex items-center gap-2"><Wind size={16} /> Condizioni Ambientali</h3>
                <div className="grid grid-cols-1 sm:grid-cols-4 gap-4">
-                 <InputGroup label="Temp (°C)" value={data.temperature} onChange={(e) => setData({ ...data, temperature: parseFloat(e.target.value) || '' })} type="number" />
-                 <InputGroup label="Pressione (kPa)" value={data.pressure} onChange={(e) => setData({ ...data, pressure: parseFloat(e.target.value) || '' })} type="number" />
-                 <InputGroup label="Umidità (%)" value={data.humidity} onChange={(e) => setData({ ...data, humidity: parseFloat(e.target.value) || '' })} type="number" />
-                 <InputGroup label="Fattore Z" value={data.zFactor} onChange={(e) => setData({ ...data, zFactor: parseFloat(e.target.value) || '' })} type="number" readOnly={data.zFactorMethod === 'ISO_WATER'} />
+                 {/* FIX: Cast environment variables to 'number | ""' to satisfy state interface requirements */}
+                 <InputGroup label="Temp (°C)" value={data.temperature} onChange={(e) => setData({ ...data, temperature: (e.target.value === '' ? '' : parseFloat(e.target.value)) as number | '' })} type="number" />
+                 <InputGroup label="Pressione (kPa)" value={data.pressure} onChange={(e) => setData({ ...data, pressure: (e.target.value === '' ? '' : parseFloat(e.target.value)) as number | '' })} type="number" />
+                 <InputGroup label="Umidità (%)" value={data.humidity} onChange={(e) => setData({ ...data, humidity: (e.target.value === '' ? '' : parseFloat(e.target.value)) as number | '' })} type="number" />
+                 <InputGroup label="Fattore Z" value={data.zFactor} onChange={(e) => setData({ ...data, zFactor: (e.target.value === '' ? '' : parseFloat(e.target.value)) as number | '' })} type="number" readOnly={data.zFactorMethod === 'ISO_WATER'} />
                </div>
             </div>
             <MeasurementSection type={data.type} fixedData={data.measurementsFixed} varMinData={data.measurementsVarMin} varMidData={data.measurementsVarMid} varMaxData={data.measurementsVarMax} onUpdate={updateMeasurement} zFactor={data.zFactor} toleranceSystematic={data.toleranceSystematic} toleranceRandom={data.toleranceRandom} nominalVolume={data.nominalVolume} nominalVolumeUnit={data.nominalVolumeUnit} />
