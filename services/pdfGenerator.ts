@@ -16,18 +16,6 @@ const fmtPct = (val: number, target: number, decimals = 2) => {
   return pct.toFixed(decimals);
 };
 
-// Helper to format date string to IT format
-const fmtDate = (dateStr: string | undefined) => {
-  if (!dateStr) return '-';
-  try {
-    const d = new Date(dateStr);
-    if (isNaN(d.getTime())) return dateStr; 
-    return d.toLocaleDateString('it-IT');
-  } catch (e) {
-    return dateStr || '-';
-  }
-};
-
 const parseNominal = (val: string): number => {
   const match = val.match(/[\d.]+/);
   return match ? parseFloat(match[0]) : 0;
@@ -60,13 +48,6 @@ const calculateStats = (measurements: (number | '')[], zFactor: number, nominalV
   const uncertainty = 2 * sd;
   
   return { meanMass, meanVolume, count: valid.length, volumes, sd, inaccuracy, uncertainty };
-};
-
-const checkCompliance = (stats: CalculatedStats, limitSys: number | '', limitRand: number | ''): boolean => {
-  if (limitSys === '' || limitRand === '' || typeof limitSys !== 'number' || typeof limitRand !== 'number') return true; 
-  const isSysOk = Math.abs(stats.inaccuracy) <= limitSys;
-  const isRandOk = stats.sd <= limitRand;
-  return isSysOk && isRandOk;
 };
 
 type ColorTuple = [number, number, number];
@@ -114,13 +95,13 @@ const getTheme = (options: PdfOptions): ThemeColors => {
 
 const drawChart = (doc: jsPDF, title: string, data: number[], startX: number, startY: number, width: number, height: number, color: [number, number, number], targetVolume: number, stats?: { meanVolume: number, sd: number }, manualYMin?: number | '', manualYMax?: number | '') => {
   if (data.length === 0) return;
-  const chartX = startX + 10;
-  const chartY = startY + 8; 
-  const chartW = width - 15;
+  const chartX = startX + 12;
+  const chartY = startY + 10; 
+  const chartW = width - 18;
   const chartH = height - 15;
 
-  doc.setFontSize(8); doc.setTextColor(100, 100, 100); doc.setFont('helvetica', 'bold');
-  doc.text(title, startX, startY + 3);
+  doc.setFontSize(8); doc.setTextColor(80, 80, 80); doc.setFont('helvetica', 'bold');
+  doc.text(title.toUpperCase(), startX, startY + 4);
 
   let yMin: number, yMax: number;
   if (manualYMin !== '' && manualYMin !== undefined && manualYMax !== '' && manualYMax !== undefined) {
@@ -128,47 +109,64 @@ const drawChart = (doc: jsPDF, title: string, data: number[], startX: number, st
   } else {
     let pts = [...data];
     if (targetVolume > 0) pts.push(targetVolume);
-    if (stats) { pts.push(stats.meanVolume); pts.push(stats.meanVolume + (2 * stats.sd)); pts.push(stats.meanVolume - (2 * stats.sd)); }
     pts = pts.filter(n => typeof n === 'number' && !isNaN(n) && isFinite(n));
     if (pts.length === 0) { yMin = 0; yMax = 10; } else {
       let minVal = Math.min(...pts), maxVal = Math.max(...pts);
       let span = maxVal - minVal;
       if (span === 0) { const b = maxVal === 0 ? 1 : Math.abs(maxVal * 0.05); minVal -= b; maxVal += b; span = maxVal - minVal; }
-      const minAbs = (targetVolume > 0 ? targetVolume : 100) * 0.01;
+      const minAbs = (targetVolume > 0 ? targetVolume : 100) * 0.02;
       if (span < minAbs) { const c = (minVal + maxVal) / 2; minVal = c - (minAbs/2); maxVal = c + (minAbs/2); span = minAbs; }
-      const pad = span * 0.15; yMin = minVal - pad; yMax = maxVal + pad;
+      const pad = span * 0.2; yMin = minVal - pad; yMax = maxVal + pad;
     }
   }
 
   const range = yMax - yMin;
   const mapY = (v: number) => range === 0 ? chartY + (chartH/2) : (chartY + chartH) - (((v - yMin) / range) * chartH);
 
-  doc.setDrawColor(150, 150, 150); doc.setLineWidth(0.1); doc.setLineDashPattern([1, 1], 0);
-  for (let i = 0; i <= 5; i++) {
-    const frac = i / 5; const yp = (chartY + chartH) - (frac * chartH); const lv = yMin + (frac * range);
+  // Sfondo pulito
+  doc.setFillColor(252, 252, 252);
+  doc.rect(chartX, chartY, chartW, chartH, 'F');
+
+  // Griglia orizzontale
+  doc.setDrawColor(220, 220, 220); doc.setLineWidth(0.1); doc.setLineDashPattern([1, 1], 0);
+  for (let i = 0; i <= 4; i++) {
+    const frac = i / 4; const yp = (chartY + chartH) - (frac * chartH); const lv = yMin + (frac * range);
     doc.line(chartX, yp, chartX + chartW, yp);
-    doc.setFontSize(5); doc.text(lv.toFixed(2), chartX - 2, yp + 1, { align: 'right' });
+    doc.setFontSize(5); doc.setTextColor(150); doc.text(lv.toFixed(2), chartX - 2, yp + 1, { align: 'right' });
   }
   doc.setLineDashPattern([], 0);
 
+  // Rimosso il rettangolo scuro della SD (schifezza nera). 
+  // Al suo posto, usiamo solo le linee tratteggiate per l'intervallo di incertezza se necessario.
   if (stats && stats.sd > 0) {
+    doc.setDrawColor(color[0], color[1], color[2]); doc.setLineWidth(0.1); doc.setLineDashPattern([2, 2], 0);
     const up = mapY(stats.meanVolume + 2*stats.sd); const lo = mapY(stats.meanVolume - 2*stats.sd);
-    doc.setFillColor(color[0], color[1], color[2], 0.1);
-    doc.rect(chartX, up, chartW, Math.abs(lo - up), 'F');
+    if (up >= chartY && up <= chartY + chartH) doc.line(chartX, up, chartX + chartW, up);
+    if (lo >= chartY && lo <= chartY + chartH) doc.line(chartX, lo, chartX + chartW, lo);
+    doc.setLineDashPattern([], 0);
   }
 
+  // Linea Target
   const ty = mapY(targetVolume);
-  if (ty >= chartY && ty <= chartY + chartH) { doc.setDrawColor(50); doc.setLineWidth(0.3); doc.setLineDashPattern([3, 2], 0); doc.line(chartX, ty, chartX + chartW, ty); doc.setLineDashPattern([], 0); }
+  if (ty >= chartY && ty <= chartY + chartH) { 
+    doc.setDrawColor(180, 180, 180); doc.setLineWidth(0.3); doc.setLineDashPattern([3, 2], 0); 
+    doc.line(chartX, ty, chartX + chartW, ty); doc.setLineDashPattern([], 0); 
+  }
 
+  // Plot dei dati
   if (data.length > 0) {
-    doc.setDrawColor(...color); doc.setLineWidth(0.5);
+    doc.setDrawColor(...color); doc.setLineWidth(0.6);
     const xs = chartW / (data.length > 1 ? data.length - 1 : 1);
     data.forEach((v, i) => {
       const x = chartX + (i * xs); const y = mapY(v);
       if (i > 0) doc.line(chartX + (i-1)*xs, mapY(data[i-1]), x, y);
-      doc.setFillColor(...color); doc.circle(x, y, 1, 'F');
+      doc.setFillColor(...color); doc.circle(x, y, 0.8, 'F');
     });
   }
+
+  // Bordo finale grafico
+  doc.setDrawColor(200, 200, 200); doc.setLineWidth(0.2);
+  doc.rect(chartX, chartY, chartW, chartH, 'S');
 };
 
 export const createCalibrationPDF = (data: CalibrationData, returnBlob = false): any => {
@@ -180,23 +178,30 @@ export const createCalibrationPDF = (data: CalibrationData, returnBlob = false):
   let nominalVolUl = parseNominal(data.nominalVolume);
   if (data.nominalVolumeUnit === 'ml') nominalVolUl *= 1000;
 
-  // Header
+  // Header Professionale
   doc.setFillColor(...colors.primary); doc.rect(0, 0, 210, 3, 'F');
-  doc.setFont('helvetica', 'bold'); doc.setFontSize(32); doc.setTextColor(50); doc.text('2S', 14, 22);
-  doc.setFontSize(18); doc.setTextColor(...colors.textDark); doc.text('CERTIFICATO DI TARATURA', 60, 16);
-  doc.setFontSize(9); doc.setTextColor(...colors.accent); doc.text('PIPETTE CALIBRATION REPORT', 60, 21);
+  doc.setFont('helvetica', 'bold'); doc.setFontSize(28); doc.setTextColor(40); doc.text('2S', 14, 20);
+  doc.setFontSize(16); doc.setTextColor(...colors.textDark); doc.text('CERTIFICATO DI TARATURA', 55, 15);
+  doc.setFontSize(8); doc.setTextColor(...colors.accent); doc.text('RELAZIONE TECNICA DI CONVALIDA VOLUMETRICA', 55, 20);
 
-  let curY = 40;
-  const drawF = (l: string, v: string, x: number, y: number) => {
-    doc.setFontSize(7); doc.setTextColor(...colors.textLight); doc.text(l.toUpperCase(), x, y);
-    doc.setFontSize(9); doc.setTextColor(...colors.textDark); doc.text(v, x, y + 5);
+  let curY = 35;
+  const drawField = (label: string, value: string, x: number, y: number, w: number) => {
+    doc.setFillColor(248, 250, 252); doc.rect(x, y, w, 12, 'F');
+    doc.setFontSize(6); doc.setTextColor(120, 120, 120); doc.text(label.toUpperCase(), x + 2, y + 4);
+    doc.setFontSize(9); doc.setTextColor(40, 40, 40); doc.text(value || '-', x + 2, y + 10);
   };
 
-  const cw = 48;
-  drawF('Costruttore', data.manufacturer || '-', 14, curY);
-  drawF('Modello', data.model || '-', 14 + cw, curY);
-  drawF('Matricola', data.serialNumber || '-', 14 + cw*2, curY);
-  drawF('Volume', `${data.nominalVolume} ${data.nominalVolumeUnit}`, 14 + cw*3, curY);
+  const colW = 45;
+  drawField('Costruttore', data.manufacturer, 14, curY, colW);
+  drawField('Modello', data.model, 14 + colW + 2, curY, colW);
+  drawField('Matricola', data.serialNumber, 14 + (colW + 2) * 2, curY, colW);
+  drawField('Volume Nominale', `${data.nominalVolume} ${data.nominalVolumeUnit}`, 14 + (colW + 2) * 3, curY, colW);
+
+  curY += 16;
+  drawField('Data Test', data.testDate, 14, curY, colW);
+  drawField('Temp. Ambiente', `${data.temperature} °C`, 14 + colW + 2, curY, colW);
+  drawField('Pressione', `${data.pressure} kPa`, 14 + (colW + 2) * 2, curY, colW);
+  drawField('Fattore Z', fmt(data.zFactor, 5), 14 + (colW + 2) * 3, curY, colW);
 
   curY += 25;
   const statsFixed = calculateStats(data.measurementsFixed, zFactor, nominalVolUl);
@@ -206,11 +211,35 @@ export const createCalibrationPDF = (data: CalibrationData, returnBlob = false):
   const statsMax = calculateStats(data.measurementsVarMax, zFactor, targetMax);
 
   if (data.type === PipetteType.FIXED) {
-    if (pdfOpts.includeCharts) drawChart(doc, "Grafico Stabilità", statsFixed.volumes, 14, curY, 182, 60, colors.accent, nominalVolUl, statsFixed);
+    if (pdfOpts.includeCharts) drawChart(doc, "Stabilità del Volume Erogato", statsFixed.volumes, 14, curY, 182, 60, colors.accent, nominalVolUl, statsFixed);
     curY += 75;
-    autoTable(doc, { startY: curY, head: [['Parametro', 'Risultato']], body: [['Volume Medio', fmt(statsFixed.meanVolume) + ' µl'], ['Inaccuratezza', fmtPct(statsFixed.inaccuracy, nominalVolUl) + ' %'], ['Incertezza (k=2)', fmtPct(statsFixed.uncertainty, nominalVolUl) + ' %']], theme: 'grid', headStyles: { fillColor: colors.primary } });
+    autoTable(doc, { 
+      startY: curY, 
+      head: [['Parametro Statistico', 'Valore Rilevato', 'Unità']], 
+      body: [
+        ['Volume Medio Calcolato', fmt(statsFixed.meanVolume, 3), 'µl'], 
+        ['Errore Sistematico (Inaccuratezza)', fmt(statsFixed.inaccuracy, 3), 'µl'],
+        ['E% (Errore Relativo)', fmtPct(statsFixed.inaccuracy, nominalVolUl), '%'],
+        ['Deviazione Standard (Imprecisione)', fmt(statsFixed.sd, 4), 'µl'],
+        ['Incertezza Estesa (k=2)', fmt(statsFixed.uncertainty, 3), 'µl']
+      ], 
+      theme: 'grid', 
+      headStyles: { fillColor: colors.primary, fontSize: 8 },
+      styles: { fontSize: 8, cellPadding: 2 }
+    });
   } else {
-    autoTable(doc, { startY: curY, head: [['Volume', 'Media (µl)', 'E (%)', 'U (%)']], body: [[`Min (${targetMin})`, fmt(statsMin.meanVolume), fmtPct(statsMin.inaccuracy, targetMin), fmtPct(statsMin.uncertainty, targetMin)], [`Mid (${targetMid})`, fmt(statsMid.meanVolume), fmtPct(statsMid.inaccuracy, targetMid), fmtPct(statsMid.uncertainty, targetMid)], [`Max (${targetMax})`, fmt(statsMax.meanVolume), fmtPct(statsMax.inaccuracy, targetMax), fmtPct(statsMax.uncertainty, targetMax)]], theme: 'grid', headStyles: { fillColor: colors.primary } });
+    autoTable(doc, { 
+      startY: curY, 
+      head: [['Volume Test', 'Media (µl)', 'E (%)', 'SD (µl)', 'Stato']], 
+      body: [
+        [`Min (${targetMin})`, fmt(statsMin.meanVolume, 2), fmtPct(statsMin.inaccuracy, targetMin), fmt(statsMin.sd, 3), (Math.abs(statsMin.inaccuracy) <= (Number(data.toleranceSystematic) || 999)) ? 'PASS' : 'FAIL'], 
+        [`Mid (${targetMid})`, fmt(statsMid.meanVolume, 2), fmtPct(statsMid.inaccuracy, targetMid), fmt(statsMid.sd, 3), (Math.abs(statsMid.inaccuracy) <= (Number(data.toleranceSystematic) || 999)) ? 'PASS' : 'FAIL'], 
+        [`Max (${targetMax})`, fmt(statsMax.meanVolume, 2), fmtPct(statsMax.inaccuracy, targetMax), fmt(statsMax.sd, 3), (Math.abs(statsMax.inaccuracy) <= (Number(data.toleranceSystematic) || 999)) ? 'PASS' : 'FAIL']
+      ], 
+      theme: 'grid', 
+      headStyles: { fillColor: colors.primary, fontSize: 8 },
+      styles: { fontSize: 8 }
+    });
   }
 
   if (returnBlob) return doc.output('bloburl');
@@ -219,5 +248,5 @@ export const createCalibrationPDF = (data: CalibrationData, returnBlob = false):
 
 export const generatePDF = (data: CalibrationData) => createCalibrationPDF(data, false);
 export const getPDFPreviewURL = (data: CalibrationData) => createCalibrationPDF(data, true);
-export const generateClientListPDF = (n: string, p: StoredPipette[]) => { /* ... remain unchanged ... */ };
-export const generateLabelsPDF = (d: string, c: number) => { /* ... remain unchanged ... */ };
+export const generateClientListPDF = (n: string, p: StoredPipette[]) => { /* No-op */ };
+export const generateLabelsPDF = (d: string, c: number) => { /* No-op */ };
