@@ -3,7 +3,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { supabase, isSupabaseConfigured } from './supabaseClient';
 import { Auth } from './components/Auth';
 import { Session } from '@supabase/supabase-js';
-import { Beaker, Wind, Save, Settings, FileText, Gauge, Info, CheckCircle2, AlertCircle, X, Database, LogOut, Loader2, ShieldAlert, Eye, EyeOff, Download, Layers, Calendar, Thermometer, Activity, User, Plus, Upload, FileSpreadsheet, Trash2, Search, Filter } from 'lucide-react';
+import { Beaker, Wind, Save, Settings, FileText, Gauge, Info, CheckCircle2, AlertCircle, X, Database, LogOut, Loader2, ShieldAlert, Eye, EyeOff, Download, Layers, Calendar, Thermometer, Activity, User, Plus, Upload, FileSpreadsheet, Trash2, Search, Filter, CloudRain, MapPin } from 'lucide-react';
 import { CalibrationData, PipetteType, Client, StoredPipette } from './types';
 import { INITIAL_MEASUREMENTS_FIXED, INITIAL_MEASUREMENTS_VAR, DEFAULT_Z_FACTOR, calculateZFactor, ISO_TOLERANCES_DATA, PIPETTE_PRESETS } from './constants';
 import { InputGroup } from './components/InputGroup';
@@ -30,6 +30,7 @@ const App: React.FC = () => {
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [showPreview, setShowPreview] = useState(false);
   const [saveLoading, setSaveLoading] = useState(false);
+  const [weatherLoading, setWeatherLoading] = useState(false);
 
   const [data, setData] = useState<CalibrationData>({
     manufacturer: '', model: '', serialNumber: '', nominalVolume: '', nominalVolumeUnit: 'ul',
@@ -62,6 +63,16 @@ const App: React.FC = () => {
   useEffect(() => { if (session) fetchClients(); }, [session]);
   useEffect(() => { if (session && selectedClientId) fetchPipettes(selectedClientId); }, [session, selectedClientId]);
 
+  // Ricalcola fattore Z quando cambiano temp o pressione
+  useEffect(() => {
+    if (data.temperature !== '' && data.pressure !== '') {
+      const newZ = calculateZFactor(Number(data.temperature), Number(data.pressure));
+      if (newZ !== data.zFactor) {
+        setData(prev => ({ ...prev, zFactor: newZ }));
+      }
+    }
+  }, [data.temperature, data.pressure]);
+
   useEffect(() => {
     if (data.testDate && data.calibrationFrequencyMonths) {
       const d = new Date(data.testDate);
@@ -73,6 +84,43 @@ const App: React.FC = () => {
 
   const fetchClients = async () => { const { data } = await supabase.from('clients').select('*').order('name'); setClients(data || []); };
   const fetchPipettes = async (id: string) => { const { data } = await supabase.from('pipettes').select('*').eq('client_id', id).order('created_at', { ascending: false }); setStoredPipettes(data || []); };
+
+  const fetchWeather = () => {
+    setWeatherLoading(true);
+    if (!navigator.geolocation) {
+      setNotification({ message: "Geolocalizzazione non supportata", type: 'error', visible: true });
+      setWeatherLoading(false);
+      return;
+    }
+
+    navigator.geolocation.getCurrentPosition(async (pos) => {
+      try {
+        const { latitude, longitude } = pos.coords;
+        const response = await fetch(`https://api.open-meteo.com/v1/forecast?latitude=${latitude}&longitude=${longitude}&current=temperature_2m,surface_pressure`);
+        const result = await response.json();
+        
+        if (result.current) {
+          // Converti pressione hPa in kPa (1 hPa = 0.1 kPa)
+          const pressureKpa = (result.current.surface_pressure * 0.1).toFixed(1);
+          const tempC = result.current.temperature_2m;
+          
+          setData(prev => ({
+            ...prev,
+            temperature: tempC,
+            pressure: parseFloat(pressureKpa)
+          }));
+          setNotification({ message: "Dati meteo aggiornati con successo", type: 'success', visible: true });
+        }
+      } catch (err) {
+        setNotification({ message: "Errore nel recupero dati meteo", type: 'error', visible: true });
+      } finally {
+        setWeatherLoading(false);
+      }
+    }, () => {
+      setNotification({ message: "Permesso geolocalizzazione negato", type: 'error', visible: true });
+      setWeatherLoading(false);
+    });
+  };
 
   const handleCreateClient = async () => {
     if (!newClientName.trim()) return;
@@ -149,12 +197,10 @@ const App: React.FC = () => {
 
   const nominalUl = (parseFloat(data.nominalVolume) || 0) * (data.nominalVolumeUnit === 'ml' ? 1000 : 1);
 
-  // Filtraggio Clienti
   const filteredClients = clients.filter(c => 
     c.name.toLowerCase().includes(clientSearchTerm.toLowerCase())
   );
 
-  // Filtraggio Pipette
   const filteredPipettes = storedPipettes.filter(p => 
     p.serial_number.toLowerCase().includes(pipetteSearchTerm.toLowerCase()) ||
     p.manufacturer.toLowerCase().includes(pipetteSearchTerm.toLowerCase()) ||
@@ -201,7 +247,6 @@ const App: React.FC = () => {
                     const p = PIPETTE_PRESETS.find(x => x.name === n);
                     if (p) {
                       const limits = ISO_TOLERANCES_DATA.find(iso => iso.vol === (parseFloat(p.nominalVolume) * (p.nominalVolume.includes('ml') ? 1000 : 1)));
-                      // Fix: Map fields explicitly to avoid spreading 'name' and fix type issues
                       setData(prev => ({ 
                         ...prev, 
                         manufacturer: p.manufacturer,
@@ -228,13 +273,20 @@ const App: React.FC = () => {
             </div>
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-              {/* DATI */}
+              {/* DATI ANAGRAFICA & DATA */}
               <section className="space-y-4">
                 <div className="flex items-center gap-3 px-1">
                   <div className="p-2 bg-violet-500/10 rounded-lg text-violet-400"><Info size={16}/></div>
-                  <h2 className="text-sm font-bold text-white uppercase tracking-wider">Anagrafica Strumento</h2>
+                  <h2 className="text-sm font-bold text-white uppercase tracking-wider">Anagrafica & Data</h2>
                 </div>
                 <div className="bg-slate-800/20 p-6 rounded-3xl border border-slate-700/30 space-y-4">
+                  <InputGroup 
+                    label="Data Taratura" 
+                    type="date" 
+                    value={data.testDate} 
+                    onChange={(e) => setData({...data, testDate: e.target.value})} 
+                    icon={<Calendar size={16}/>}
+                  />
                   <InputGroup label="Costruttore" value={data.manufacturer} onChange={(e) => setData({...data, manufacturer: e.target.value})} />
                   <InputGroup label="Modello" value={data.model} onChange={(e) => setData({...data, model: e.target.value})} />
                   <InputGroup label="Matricola (S/N)" value={data.serialNumber} onChange={(e) => setData({...data, serialNumber: e.target.value})} />
@@ -252,13 +304,26 @@ const App: React.FC = () => {
 
               {/* AMBIENTE & ISO */}
               <section className="space-y-6">
-                <div className="bg-slate-800/20 p-6 rounded-3xl border border-slate-700/30 space-y-4">
-                  <div className="flex items-center gap-3 mb-2"><Thermometer size={16} className="text-emerald-400"/><h2 className="text-xs font-bold text-slate-300 uppercase">Ambiente</h2></div>
+                <div className="bg-slate-800/20 p-6 rounded-3xl border border-slate-700/30 space-y-4 relative">
+                  <div className="flex items-center justify-between mb-2">
+                    <div className="flex items-center gap-3">
+                      <Thermometer size={16} className="text-emerald-400"/>
+                      <h2 className="text-xs font-bold text-slate-300 uppercase">Ambiente</h2>
+                    </div>
+                    <button 
+                      onClick={fetchWeather} 
+                      disabled={weatherLoading}
+                      className="px-3 py-1.5 bg-emerald-600/20 text-emerald-400 hover:bg-emerald-600 hover:text-white rounded-lg text-[10px] font-bold flex items-center gap-2 transition-all disabled:opacity-50"
+                    >
+                      {weatherLoading ? <Loader2 className="animate-spin" size={12}/> : <MapPin size={12}/>}
+                      RILEVA METEO LIVE
+                    </button>
+                  </div>
                   <div className="grid grid-cols-2 gap-4">
                     <InputGroup label="Temp (°C)" value={data.temperature} onChange={(e) => setData({...data, temperature: e.target.value === '' ? '' : parseFloat(e.target.value)})} type="number" step="0.1" />
                     <InputGroup label="Press (kPa)" value={data.pressure} onChange={(e) => setData({...data, pressure: e.target.value === '' ? '' : parseFloat(e.target.value)})} type="number" step="0.1" />
                   </div>
-                  <InputGroup label="Z Factor" value={data.zFactor} onChange={() => {}} readOnly type="number" unit="Z" />
+                  <InputGroup label="Z Factor (Calcolato)" value={data.zFactor} onChange={() => {}} readOnly type="number" unit="Z" />
                 </div>
                 <div className="bg-slate-800/20 p-6 rounded-3xl border border-slate-700/30 grid grid-cols-2 gap-4">
                    <InputGroup label="Tolleranza E (µl)" value={data.toleranceSystematic} onChange={(e) => setData({...data, toleranceSystematic: e.target.value === '' ? '' : parseFloat(e.target.value)})} type="number" step="0.01" />
@@ -275,7 +340,7 @@ const App: React.FC = () => {
                 const arr = [...(data[field] as any)];
                 arr[i] = v === '' ? '' : parseFloat(v);
                 setData({...data, [field]: arr});
-              }} />
+              }} zFactor={data.zFactor} />
               <div className="mt-8">
                  {data.type === PipetteType.FIXED ? (
                    <LiveChart data={data.measurementsFixed} target={nominalUl} label="Fissa" zFactor={Number(data.zFactor) || 1} />
