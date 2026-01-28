@@ -10,6 +10,7 @@ import { InputGroup } from './components/InputGroup';
 import { MeasurementSection } from './components/MeasurementSection';
 import { LiveChart } from './components/LiveChart';
 import { generatePDF, getPDFPreviewURL } from './services/pdfGenerator';
+import { CustomDatePicker } from './components/CustomDatePicker';
 
 const App: React.FC = () => {
   if (!isSupabaseConfigured) {
@@ -280,12 +281,10 @@ const App: React.FC = () => {
                   <h2 className="text-sm font-bold text-white uppercase tracking-wider">Anagrafica & Data</h2>
                 </div>
                 <div className="bg-slate-800/20 p-6 rounded-3xl border border-slate-700/30 space-y-4">
-                  <InputGroup 
+                  <CustomDatePicker 
                     label="Data Taratura" 
-                    type="date" 
                     value={data.testDate} 
-                    onChange={(e) => setData({...data, testDate: e.target.value})} 
-                    icon={<Calendar size={16}/>}
+                    onChange={(val) => setData({...data, testDate: val})} 
                   />
                   <InputGroup label="Costruttore" value={data.manufacturer} onChange={(e) => setData({...data, manufacturer: e.target.value})} />
                   <InputGroup label="Modello" value={data.model} onChange={(e) => setData({...data, model: e.target.value})} />
