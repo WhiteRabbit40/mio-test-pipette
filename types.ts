@@ -37,7 +37,7 @@ export interface CalibrationData {
   
   // Environment
   temperature: number | '';
-  pressure: number | ''; // In kPa
+  pressure: number | ''; // In hPa (mbar)
   humidity: number | '';
   zFactor: number | ''; // Fattore Z
   zFactorMethod: ZFactorMethod; // Method of calculation

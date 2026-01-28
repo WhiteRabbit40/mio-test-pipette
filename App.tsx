@@ -67,7 +67,8 @@ const App: React.FC = () => {
   // Ricalcola fattore Z quando cambiano temp o pressione
   useEffect(() => {
     if (data.temperature !== '' && data.pressure !== '') {
-      const newZ = calculateZFactor(Number(data.temperature), Number(data.pressure));
+      // Conversione hPa (mbar) -> kPa per la funzione di calcolo (1 hPa = 0.1 kPa)
+      const newZ = calculateZFactor(Number(data.temperature), Number(data.pressure) * 0.1);
       if (newZ !== data.zFactor) {
         setData(prev => ({ ...prev, zFactor: newZ }));
       }
@@ -101,16 +102,16 @@ const App: React.FC = () => {
         const result = await response.json();
         
         if (result.current) {
-          // Converti pressione hPa in kPa (1 hPa = 0.1 kPa)
-          const pressureKpa = (result.current.surface_pressure * 0.1).toFixed(1);
+          // Utilizziamo direttamente hPa (mbar) come richiesto dall'utente
+          const pressureHpa = result.current.surface_pressure;
           const tempC = result.current.temperature_2m;
           
           setData(prev => ({
             ...prev,
             temperature: tempC,
-            pressure: parseFloat(pressureKpa)
+            pressure: pressureHpa
           }));
-          setNotification({ message: "Dati meteo aggiornati con successo", type: 'success', visible: true });
+          setNotification({ message: "Dati meteo aggiornati (hPa)", type: 'success', visible: true });
         }
       } catch (err) {
         setNotification({ message: "Errore nel recupero dati meteo", type: 'error', visible: true });
@@ -320,7 +321,7 @@ const App: React.FC = () => {
                   </div>
                   <div className="grid grid-cols-2 gap-4">
                     <InputGroup label="Temp (°C)" value={data.temperature} onChange={(e) => setData({...data, temperature: e.target.value === '' ? '' : parseFloat(e.target.value)})} type="number" step="0.1" />
-                    <InputGroup label="Press (kPa)" value={data.pressure} onChange={(e) => setData({...data, pressure: e.target.value === '' ? '' : parseFloat(e.target.value)})} type="number" step="0.1" />
+                    <InputGroup label="Press (hPa/mbar)" value={data.pressure} onChange={(e) => setData({...data, pressure: e.target.value === '' ? '' : parseFloat(e.target.value)})} type="number" step="0.1" />
                   </div>
                   <InputGroup label="Z Factor (Calcolato)" value={data.zFactor} onChange={() => {}} readOnly type="number" unit="Z" />
                 </div>
