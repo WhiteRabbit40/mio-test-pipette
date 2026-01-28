@@ -61,6 +61,16 @@ const App: React.FC = () => {
     return () => subscription.unsubscribe();
   }, []);
 
+  // Timer per la scomparsa automatica delle notifiche
+  useEffect(() => {
+    if (notification?.visible) {
+      const timer = setTimeout(() => {
+        setNotification(prev => prev ? { ...prev, visible: false } : null);
+      }, 3000);
+      return () => clearTimeout(timer);
+    }
+  }, [notification]);
+
   useEffect(() => { if (session) fetchClients(); }, [session]);
   useEffect(() => { if (session && selectedClientId) fetchPipettes(selectedClientId); }, [session, selectedClientId]);
 
