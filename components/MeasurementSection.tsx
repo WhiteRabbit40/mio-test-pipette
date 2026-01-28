@@ -1,7 +1,7 @@
 
-import React, { ReactNode } from 'react';
+import React, { ReactNode, useState, useEffect, useRef } from 'react';
 import { PipetteType } from '../types';
-import { ArrowDownToLine, ArrowUpToLine, Target, Beaker, CheckCircle2, XCircle, AlertCircle, Gauge, Activity, Percent, Ruler, ShieldCheck } from 'lucide-react';
+import { ArrowDownToLine, ArrowUpToLine, Target, Beaker, CheckCircle2, XCircle, AlertCircle, Gauge, Activity, Percent, Ruler, ShieldCheck, HelpCircle, X } from 'lucide-react';
 
 interface Props {
   type: PipetteType;
@@ -81,28 +81,65 @@ const KpiCard: React.FC<{
   status?: 'pass' | 'fail' | 'neutral';
   tolerance?: number;
   currentDiff?: number;
-}> = ({ label, value, unit, icon, status = 'neutral', tolerance, currentDiff }) => {
+  explanation: string;
+}> = ({ label, value, unit, icon, status = 'neutral', tolerance, currentDiff, explanation }) => {
   const isPass = status === 'pass';
   const isFail = status === 'fail';
+  const [showTooltip, setShowTooltip] = useState(false);
+  const tooltipTimer = useRef<NodeJS.Timeout | null>(null);
   
-  // Calcolo percentuale di utilizzo della tolleranza
   const toleranceUsage = (tolerance && currentDiff) ? Math.min(100, (Math.abs(currentDiff) / tolerance) * 100) : 0;
 
+  const toggleTooltip = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    setShowTooltip(!showTooltip);
+  };
+
+  useEffect(() => {
+    if (showTooltip) {
+      if (tooltipTimer.current) clearTimeout(tooltipTimer.current);
+      tooltipTimer.current = setTimeout(() => setShowTooltip(false), 10000);
+    }
+    return () => { if (tooltipTimer.current) clearTimeout(tooltipTimer.current); };
+  }, [showTooltip]);
+
   return (
-    <div className={`p-4 rounded-2xl border transition-all duration-300 ${
+    <div className={`p-4 rounded-2xl border transition-all duration-300 relative group ${
       isFail ? 'bg-red-500/5 border-red-500/20 shadow-lg shadow-red-950/20' : 
       isPass ? 'bg-emerald-500/5 border-emerald-500/20 shadow-lg shadow-emerald-950/10' : 
       'bg-slate-800/20 border-slate-700/50'
     }`}>
+      {/* Tooltip Popup */}
+      {showTooltip && (
+        <div className="absolute bottom-full left-0 mb-3 w-64 bg-slate-800 border border-slate-700 rounded-3xl shadow-2xl p-4 z-[50] animate-in fade-in zoom-in-95 duration-150 backdrop-blur-xl">
+           <div className="flex justify-between items-start mb-2">
+             <span className="text-[10px] font-black uppercase tracking-widest text-violet-400">Info Parametro</span>
+             <button onClick={() => setShowTooltip(false)} className="text-slate-500 hover:text-white transition-colors">
+               <X size={14} />
+             </button>
+           </div>
+           <p className="text-xs text-slate-300 leading-relaxed font-medium">{explanation}</p>
+        </div>
+      )}
+
       <div className="flex justify-between items-start mb-2">
         <div className={`p-2 rounded-xl ${isFail ? 'bg-red-500/10 text-red-400' : isPass ? 'bg-emerald-500/10 text-emerald-400' : 'bg-slate-700/30 text-slate-400'}`}>
           {icon}
         </div>
-        {status !== 'neutral' && (
-          <div className={`px-2 py-0.5 rounded-full text-[9px] font-black uppercase tracking-tighter ${isPass ? 'bg-emerald-500 text-white' : 'bg-red-500 text-white'}`}>
-            {isPass ? 'In Spec' : 'Out Spec'}
-          </div>
-        )}
+        <div className="flex gap-1.5 items-center">
+          <button 
+            onClick={toggleTooltip}
+            className="p-1 text-slate-600 hover:text-violet-400 transition-colors"
+            title="Spiegazione parametro"
+          >
+            <HelpCircle size={14} />
+          </button>
+          {status !== 'neutral' && (
+            <div className={`px-2 py-0.5 rounded-full text-[9px] font-black uppercase tracking-tighter ${isPass ? 'bg-emerald-500 text-white' : 'bg-red-500 text-white'}`}>
+              {isPass ? 'In Spec' : 'Out Spec'}
+            </div>
+          )}
+        </div>
       </div>
       <div>
         <p className="text-[10px] font-bold text-slate-500 uppercase tracking-tight mb-1">{label}</p>
@@ -168,6 +205,7 @@ const StatsDashboard: React.FC<{
           value={meanVol.toFixed(3)} 
           unit="µl" 
           icon={<Beaker size={16} />} 
+          explanation="La media aritmetica dei volumi erogati calcolati applicando il fattore Z alla massa rilevata."
         />
         <KpiCard 
           label="Errore Sist. (E)" 
@@ -177,12 +215,14 @@ const StatsDashboard: React.FC<{
           status={isPassSys ? 'pass' : 'fail'}
           tolerance={Number(tolSys)}
           currentDiff={inaccuracy}
+          explanation="La differenza tra il volume medio calcolato e il volume nominale (o target) impostato."
         />
         <KpiCard 
           label="Errore Rel. (E%)" 
           value={relInaccuracy.toFixed(2)} 
           unit="%" 
           icon={<Percent size={16} />} 
+          explanation="L'errore sistematico espresso come percentuale del valore nominale."
         />
         <KpiCard 
           label="Imprecisione (SD)" 
@@ -192,12 +232,14 @@ const StatsDashboard: React.FC<{
           status={isPassRand ? 'pass' : 'fail'}
           tolerance={Number(tolRand)}
           currentDiff={sd}
+          explanation="La deviazione standard delle misure. Indica il grado di ripetibilità dello strumento."
         />
         <KpiCard 
           label="Incertezza (k=2)" 
           value={(sd * 2).toFixed(3)} 
           unit="µl" 
           icon={<ShieldCheck size={16} />} 
+          explanation="L'incertezza estesa con fattore di copertura k=2, che fornisce un intervallo di confidenza di circa il 95%."
         />
       </div>
     </div>

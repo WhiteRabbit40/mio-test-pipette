@@ -103,7 +103,7 @@ const drawStatsCard = (
   value: string, 
   unit: string, 
   colors: ThemeColors, 
-  status?: 'pass' | 'fail', 
+  status?: 'pass' | 'fail', // Now only used for determining the progress bar color
   tolUsage?: number
 ) => {
   // Card Background
@@ -117,7 +117,8 @@ const drawStatsCard = (
   doc.setTextColor(120, 120, 120);
   doc.text(label.toUpperCase(), x + 4, y + 8);
 
-  // Status Badge
+  // Status Badge - REMOVED PER USER REQUEST FOR PDF
+  /*
   if (status) {
     const isPass = status === 'pass';
     doc.setFillColor(...(isPass ? colors.success : colors.fail));
@@ -126,6 +127,7 @@ const drawStatsCard = (
     doc.setFontSize(5);
     doc.text(isPass ? 'IN SPEC' : 'OUT SPEC', x + w - 11, y + 8.5, { align: 'center' });
   }
+  */
 
   // Value
   doc.setFontSize(11);
@@ -153,6 +155,7 @@ const drawStatsCard = (
     
     // Fill
     const fillW = Math.min(barW, (tolUsage / 100) * barW);
+    // Even without the badge, we keep the semantic color for the progress bar
     const fillCol = tolUsage > 100 ? colors.fail : tolUsage > 80 ? [245, 158, 11] as ColorTuple : colors.success;
     doc.setFillColor(...fillCol);
     doc.rect(barX, barY, fillW, barH, 'F');
@@ -317,21 +320,21 @@ export const createCalibrationPDF = (data: CalibrationData, returnBlob = false):
   const statsMax = calculateStats(data.measurementsVarMax, zFactor, targetMax);
 
   if (data.type === PipetteType.FIXED) {
-    // DASHBOARD STATISTICO LIVE VISIVO
-    curY = drawStatsDashboard(doc, curY, statsFixed, nominalVolUl, data.toleranceSystematic, data.toleranceRandom, colors, "Analisi Statistica Live");
+    // FORMAL TITLE FOR THE PDF
+    curY = drawStatsDashboard(doc, curY, statsFixed, nominalVolUl, data.toleranceSystematic, data.toleranceRandom, colors, "Sintesi dei Risultati");
     
     if (pdfOpts.includeCharts) {
       drawChart(doc, "Stabilità del Volume Erogato", statsFixed.volumes, 14, curY, 182, 50, colors.accent, nominalVolUl, statsFixed);
       curY += 65;
     }
   } else {
-    // Per variabile disegniamo i 3 dashboard in sequenza (più compatti se necessario)
-    curY = drawStatsDashboard(doc, curY, statsMin, targetMin, data.toleranceSystematic, data.toleranceRandom, colors, "Volume Minimo (10%)");
-    curY = drawStatsDashboard(doc, curY, statsMid, targetMid, data.toleranceSystematic, data.toleranceRandom, colors, "Volume Medio (50%)");
-    curY = drawStatsDashboard(doc, curY, statsMax, targetMax, data.toleranceSystematic, data.toleranceRandom, colors, "Volume Massimo (100%)");
+    // For variable, we draw the 3 dashboards sequentially with more formal titles
+    curY = drawStatsDashboard(doc, curY, statsMin, targetMin, data.toleranceSystematic, data.toleranceRandom, colors, "Risultati Volume Minimo (10%)");
+    curY = drawStatsDashboard(doc, curY, statsMid, targetMid, data.toleranceSystematic, data.toleranceRandom, colors, "Risultati Volume Medio (50%)");
+    curY = drawStatsDashboard(doc, curY, statsMax, targetMax, data.toleranceSystematic, data.toleranceRandom, colors, "Risultati Volume Massimo (100%)");
   }
 
-  // Sezione Firme in fondo
+  // Signature Section at the bottom
   doc.setFontSize(8);
   doc.setTextColor(150);
   doc.text("Il presente certificato garantisce che lo strumento è stato testato secondo i parametri ISO 8655.", 14, 280);
