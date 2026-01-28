@@ -3,7 +3,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { supabase, isSupabaseConfigured } from './supabaseClient';
 import { Auth } from './components/Auth';
 import { Session } from '@supabase/supabase-js';
-import { Beaker, Wind, Save, Settings, FileText, Gauge, Info, CheckCircle2, AlertCircle, X, Database, LogOut, Loader2, ShieldAlert, Eye, EyeOff, Download, Layers, Calendar, Thermometer, Activity, User, Plus, Upload, FileSpreadsheet, Trash2, Search, Filter, CloudRain, MapPin, Settings2 } from 'lucide-react';
+import { Beaker, Wind, Save, Settings, FileText, Gauge, Info, CheckCircle2, AlertCircle, X, Database, LogOut, Loader2, ShieldAlert, Eye, EyeOff, Download, Layers, Calendar, Thermometer, Activity, User, Plus, Upload, FileSpreadsheet, Trash2, Search, Filter, CloudRain, MapPin, Settings2, ShieldCheck } from 'lucide-react';
 import { CalibrationData, PipetteType, Client, StoredPipette } from './types';
 import { INITIAL_MEASUREMENTS_FIXED, INITIAL_MEASUREMENTS_VAR, DEFAULT_Z_FACTOR, calculateZFactor, ISO_TOLERANCES_DATA, PIPETTE_PRESETS } from './constants';
 import { InputGroup } from './components/InputGroup';
@@ -130,13 +130,36 @@ const App: React.FC = () => {
     });
   };
 
+  const handleGetIsoTolerances = () => {
+    if (!data.nominalVolume) {
+      setNotification({ message: "Errore: Inserisci prima il volume nominale nel campo Anagrafica", type: 'error', visible: true });
+      return;
+    }
+
+    let volUl = parseFloat(data.nominalVolume);
+    if (data.nominalVolumeUnit === 'ml') volUl *= 1000;
+
+    const limits = ISO_TOLERANCES_DATA.find(iso => iso.vol === volUl);
+    
+    if (limits) {
+      setData(prev => ({
+        ...prev,
+        toleranceSystematic: limits.sys,
+        toleranceRandom: limits.rand
+      }));
+      setNotification({ message: `Tolleranze ISO 8655 caricate per ${volUl} µl`, type: 'success', visible: true });
+    } else {
+      setNotification({ message: `Nessuna tolleranza standard ISO trovata per ${volUl} µl. Inserimento manuale richiesto.`, type: 'error', visible: true });
+    }
+  };
+
   const handleCreateClient = async () => {
     if (!newClientName.trim() || !session?.user.id) return;
     const { data: c, error } = await supabase
       .from('clients')
       .insert([{ 
         name: newClientName.trim(),
-        user_id: session.user.id // Inseriamo il user_id per soddisfare il vincolo DB
+        user_id: session.user.id
       }])
       .select()
       .single();
@@ -161,14 +184,8 @@ const App: React.FC = () => {
     reader.onload = async (event) => {
       const text = event.target?.result as string;
       const rows = text.split('\n').map(r => r.trim()).filter(r => r.length > 0);
-      
-      const newClients = rows.map(r => ({ 
-        name: r.replace(/"/g, ''),
-        user_id: session.user.id // Fondamentale anche qui
-      }));
-      
+      const newClients = rows.map(r => ({ name: r.replace(/"/g, ''), user_id: session.user.id }));
       const { error } = await supabase.from('clients').insert(newClients);
-
       if (error) setNotification({ message: "Errore importazione: " + error.message, type: 'error', visible: true });
       else { fetchClients(); setNotification({ message: `Importati ${newClients.length} clienti`, type: 'success', visible: true }); }
     };
@@ -198,7 +215,7 @@ const App: React.FC = () => {
     setSaveLoading(true);
     const { error } = await supabase.from('pipettes').insert([{
       client_id: selectedClientId,
-      user_id: session.user.id, // Aggiunto per coerenza con lo schema DB
+      user_id: session.user.id,
       manufacturer: data.manufacturer,
       model: data.model,
       serial_number: data.serialNumber,
@@ -361,10 +378,19 @@ const App: React.FC = () => {
               </section>
 
               {/* BLOCCO TOLLERANZE */}
-              <section className="bg-slate-800/20 p-6 rounded-[32px] border border-slate-700/30">
-                <div className="flex items-center gap-3 mb-6">
-                  <ShieldAlert size={18} className="text-amber-400"/>
-                  <h2 className="text-sm font-bold text-white uppercase tracking-wider">Limiti di Tolleranza</h2>
+              <section className="bg-slate-800/20 p-6 rounded-[32px] border border-slate-700/30 space-y-4">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-3">
+                    <ShieldAlert size={18} className="text-amber-400"/>
+                    <h2 className="text-sm font-bold text-white uppercase tracking-wider">Limiti di Tolleranza</h2>
+                  </div>
+                  <button 
+                    onClick={handleGetIsoTolerances} 
+                    className="px-4 py-2 bg-amber-600/10 text-amber-400 hover:bg-amber-600 hover:text-white rounded-xl text-[10px] font-black flex items-center gap-2 transition-all border border-amber-500/20"
+                  >
+                    <ShieldCheck size={12}/>
+                    APPLICA LIMITI ISO
+                  </button>
                 </div>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                    <InputGroup label="Tolleranza Sistematica E (µl)" value={data.toleranceSystematic} onChange={(e) => setData({...data, toleranceSystematic: e.target.value === '' ? '' : parseFloat(e.target.value)})} type="number" step="0.01" />
@@ -443,7 +469,7 @@ const App: React.FC = () => {
         )}
       </main>
 
-      {/* MODALI (CLIENTI / NEW CLIENT) - RIMANGONO INVARIATI */}
+      {/* MODALI (CLIENTI / NEW CLIENT) */}
       {showDbModal && (
         <div className="fixed inset-0 bg-slate-950/95 backdrop-blur-md z-[100] flex items-center justify-center p-6">
           <div className="bg-slate-900 w-full max-w-6xl h-[85vh] rounded-[40px] border border-slate-800 flex flex-col shadow-2xl overflow-hidden animate-in zoom-in-95">
