@@ -3,7 +3,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { supabase, isSupabaseConfigured } from './supabaseClient';
 import { Auth } from './components/Auth';
 import { Session } from '@supabase/supabase-js';
-import { Beaker, Wind, Save, Settings, FileText, Gauge, Info, CheckCircle2, AlertCircle, X, Database, LogOut, Loader2, ShieldAlert, Eye, EyeOff, Download, Layers, Calendar, Thermometer, Activity, User, Plus, Upload, FileSpreadsheet, Trash2, Search, Filter, CloudRain, MapPin } from 'lucide-react';
+import { Beaker, Wind, Save, Settings, FileText, Gauge, Info, CheckCircle2, AlertCircle, X, Database, LogOut, Loader2, ShieldAlert, Eye, EyeOff, Download, Layers, Calendar, Thermometer, Activity, User, Plus, Upload, FileSpreadsheet, Trash2, Search, Filter, CloudRain, MapPin, Settings2 } from 'lucide-react';
 import { CalibrationData, PipetteType, Client, StoredPipette } from './types';
 import { INITIAL_MEASUREMENTS_FIXED, INITIAL_MEASUREMENTS_VAR, DEFAULT_Z_FACTOR, calculateZFactor, ISO_TOLERANCES_DATA, PIPETTE_PRESETS } from './constants';
 import { InputGroup } from './components/InputGroup';
@@ -61,7 +61,6 @@ const App: React.FC = () => {
     return () => subscription.unsubscribe();
   }, []);
 
-  // Timer per la scomparsa automatica delle notifiche
   useEffect(() => {
     if (notification?.visible) {
       const timer = setTimeout(() => {
@@ -74,10 +73,8 @@ const App: React.FC = () => {
   useEffect(() => { if (session) fetchClients(); }, [session]);
   useEffect(() => { if (session && selectedClientId) fetchPipettes(selectedClientId); }, [session, selectedClientId]);
 
-  // Ricalcola fattore Z quando cambiano temp o pressione
   useEffect(() => {
     if (data.temperature !== '' && data.pressure !== '') {
-      // Conversione hPa (mbar) -> kPa per la funzione di calcolo (1 hPa = 0.1 kPa)
       const newZ = calculateZFactor(Number(data.temperature), Number(data.pressure) * 0.1);
       if (newZ !== data.zFactor) {
         setData(prev => ({ ...prev, zFactor: newZ }));
@@ -112,7 +109,6 @@ const App: React.FC = () => {
         const result = await response.json();
         
         if (result.current) {
-          // Utilizziamo direttamente hPa (mbar) come richiesto dall'utente
           const pressureHpa = result.current.surface_pressure;
           const tempC = result.current.temperature_2m;
           
@@ -221,6 +217,7 @@ const App: React.FC = () => {
 
   return (
     <div className="min-h-screen bg-slate-900 text-slate-100 flex flex-col h-screen overflow-hidden">
+      {/* HEADER PROFESSIONALE */}
       <header className="p-4 bg-slate-800/95 backdrop-blur-md border-b border-slate-700 flex justify-between items-center shrink-0 z-20 shadow-xl">
         <div className="flex items-center gap-3">
           <div className="bg-violet-600 p-2 rounded-xl shadow-lg shadow-violet-900/40"><Beaker size={20} className="text-white" /></div>
@@ -237,61 +234,61 @@ const App: React.FC = () => {
             </div>
           )}
           <div className="flex gap-2">
-            <button onClick={() => setShowDbModal(true)} className="px-4 py-2 bg-slate-700 hover:bg-slate-600 rounded-xl text-xs font-bold flex items-center gap-2 transition-all border border-slate-600/50"><Database size={14}/> Gestione Cloud</button>
+            <button onClick={() => setShowDbModal(true)} className="px-4 py-2 bg-slate-700 hover:bg-slate-600 rounded-xl text-xs font-bold flex items-center gap-2 transition-all border border-slate-600/50"><Database size={14}/> Archivio</button>
             <button onClick={() => supabase.auth.signOut()} className="p-2 bg-red-900/20 text-red-400 hover:bg-red-400 hover:text-white rounded-xl transition-all border border-red-500/10"><LogOut size={16}/></button>
           </div>
         </div>
       </header>
 
       <main className="flex-1 flex overflow-hidden relative">
-        <div className={`overflow-y-auto p-6 transition-all duration-500 ease-in-out ${showPreview ? 'w-full md:w-1/2 border-r border-slate-700' : 'w-full max-w-6xl mx-auto'}`}>
+        {/* CONTAINER PRINCIPALE SCORREVOLE */}
+        <div className={`overflow-y-auto p-4 md:p-8 transition-all duration-500 ease-in-out ${showPreview ? 'w-full md:w-1/2 border-r border-slate-700' : 'w-full'}`}>
           
-          <div className="space-y-8 pb-12">
-            {/* CONFIG RAPIDA */}
-            <div className="bg-slate-800/40 p-5 rounded-3xl border border-slate-700/50 flex flex-col md:flex-row gap-6 items-end shadow-inner">
-              <div className="flex-1 w-full">
-                <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-2 block ml-1">Richiamo Preset</label>
-                <select 
-                  className="w-full bg-slate-900/80 border border-slate-600 rounded-2xl px-4 py-3 text-sm text-white focus:ring-2 focus:ring-violet-500/50 outline-none transition-all"
-                  value={selectedPresetName}
-                  onChange={(e) => {
-                    const n = e.target.value; setSelectedPresetName(n);
-                    const p = PIPETTE_PRESETS.find(x => x.name === n);
-                    if (p) {
-                      const limits = ISO_TOLERANCES_DATA.find(iso => iso.vol === (parseFloat(p.nominalVolume) * (p.nominalVolume.includes('ml') ? 1000 : 1)));
-                      setData(prev => ({ 
-                        ...prev, 
-                        manufacturer: p.manufacturer,
-                        model: p.model,
-                        nominalVolume: p.nominalVolume,
-                        type: p.type as PipetteType,
-                        toleranceSystematic: limits?.sys || prev.toleranceSystematic,
-                        toleranceRandom: limits?.rand || prev.toleranceRandom
-                      }));
-                      setNotification({ message: `Configurazione caricata: ${p.name}`, type: 'success', visible: true });
-                    }
-                  }}
-                >
-                  <option value="">-- Seleziona una pipetta standard --</option>
-                  {PIPETTE_PRESETS.map((p, i) => <option key={i} value={p.name}>{p.name}</option>)}
-                </select>
-              </div>
-              <div className="bg-slate-900/50 p-1.5 rounded-2xl border border-slate-700 w-full md:w-auto">
-                <div className="grid grid-cols-2 gap-1">
-                  <button onClick={() => setData({...data, type: PipetteType.FIXED})} className={`px-6 py-2.5 rounded-xl text-xs font-bold transition-all ${data.type === PipetteType.FIXED ? 'bg-violet-600 text-white shadow-lg' : 'text-slate-500 hover:text-slate-300'}`}>Volume Fisso</button>
-                  <button onClick={() => setData({...data, type: PipetteType.VARIABLE})} className={`px-6 py-2.5 rounded-xl text-xs font-bold transition-all ${data.type === PipetteType.VARIABLE ? 'bg-violet-600 text-white shadow-lg' : 'text-slate-500 hover:text-slate-300'}`}>Variabile</button>
-                </div>
-              </div>
-            </div>
-
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-              {/* DATI ANAGRAFICA & DATA */}
-              <section className="space-y-4">
+          <div className="max-w-[1400px] mx-auto grid grid-cols-1 md:grid-cols-12 gap-8 pb-32">
+            
+            {/* COLONNA SINISTRA: ANAGRAFICA & DATA */}
+            <aside className="md:col-span-4 lg:col-span-3 space-y-6">
+              <div className="sticky top-0 space-y-6">
                 <div className="flex items-center gap-3 px-1">
                   <div className="p-2 bg-violet-500/10 rounded-lg text-violet-400"><Info size={16}/></div>
                   <h2 className="text-sm font-bold text-white uppercase tracking-wider">Anagrafica & Data</h2>
                 </div>
-                <div className="bg-slate-800/20 p-6 rounded-3xl border border-slate-700/30 space-y-4">
+
+                <div className="bg-slate-800/20 p-6 rounded-[32px] border border-slate-700/30 space-y-6 shadow-xl">
+                  {/* PRESET RAPIDO */}
+                  <div>
+                    <label className="text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-2 block ml-1">Configurazione Rapida</label>
+                    <select 
+                      className="w-full bg-slate-900 border border-slate-600 rounded-xl px-3 py-3 text-xs text-white outline-none focus:border-violet-500 transition-all"
+                      value={selectedPresetName}
+                      onChange={(e) => {
+                        const n = e.target.value; setSelectedPresetName(n);
+                        const p = PIPETTE_PRESETS.find(x => x.name === n);
+                        if (p) {
+                          const limits = ISO_TOLERANCES_DATA.find(iso => iso.vol === (parseFloat(p.nominalVolume) * (p.nominalVolume.includes('ml') ? 1000 : 1)));
+                          setData(prev => ({ 
+                            ...prev, 
+                            manufacturer: p.manufacturer,
+                            model: p.model,
+                            nominalVolume: p.nominalVolume,
+                            type: p.type as PipetteType,
+                            toleranceSystematic: limits?.sys || prev.toleranceSystematic,
+                            toleranceRandom: limits?.rand || prev.toleranceRandom
+                          }));
+                          setNotification({ message: `Preset caricato: ${p.name}`, type: 'success', visible: true });
+                        }
+                      }}
+                    >
+                      <option value="">-- Seleziona --</option>
+                      {PIPETTE_PRESETS.map((p, i) => <option key={i} value={p.name}>{p.name}</option>)}
+                    </select>
+                  </div>
+
+                  <div className="bg-slate-900/40 p-1 rounded-xl border border-slate-700 grid grid-cols-2 gap-1">
+                    <button onClick={() => setData({...data, type: PipetteType.FIXED})} className={`py-2 rounded-lg text-[10px] font-black uppercase transition-all ${data.type === PipetteType.FIXED ? 'bg-violet-600 text-white shadow-lg' : 'text-slate-500'}`}>Fissa</button>
+                    <button onClick={() => setData({...data, type: PipetteType.VARIABLE})} className={`py-2 rounded-lg text-[10px] font-black uppercase transition-all ${data.type === PipetteType.VARIABLE ? 'bg-violet-600 text-white shadow-lg' : 'text-slate-500'}`}>Variabile</button>
+                  </div>
+
                   <CustomDatePicker 
                     label="Data Taratura" 
                     value={data.testDate} 
@@ -300,95 +297,130 @@ const App: React.FC = () => {
                   <InputGroup label="Costruttore" value={data.manufacturer} onChange={(e) => setData({...data, manufacturer: e.target.value})} />
                   <InputGroup label="Modello" value={data.model} onChange={(e) => setData({...data, model: e.target.value})} />
                   <InputGroup label="Matricola (S/N)" value={data.serialNumber} onChange={(e) => setData({...data, serialNumber: e.target.value})} />
+                  
                   <div className="flex gap-4">
                     <InputGroup className="flex-1" label="Volume Nominale" value={data.nominalVolume} onChange={(e) => setData({...data, nominalVolume: e.target.value})} type="number" />
-                    <div className="w-24">
+                    <div className="w-20">
                       <label className="text-[10px] font-bold text-slate-500 uppercase mb-1.5 block ml-1">Unità</label>
-                      <select value={data.nominalVolumeUnit} onChange={(e) => setData({...data, nominalVolumeUnit: e.target.value as any})} className="w-full bg-slate-800 border border-slate-600 rounded-xl py-3 px-3 text-xs text-white outline-none">
+                      <select value={data.nominalVolumeUnit} onChange={(e) => setData({...data, nominalVolumeUnit: e.target.value as any})} className="w-full bg-slate-800 border border-slate-600 rounded-xl py-3 px-2 text-[10px] font-bold text-white outline-none">
                         <option value="ul">µl</option><option value="ml">ml</option>
                       </select>
                     </div>
                   </div>
                 </div>
+              </div>
+            </aside>
+
+            {/* COLONNA DESTRA: AMBIENTE, TOLLERANZE, MISURE */}
+            <div className="md:col-span-8 lg:col-span-9 space-y-8">
+              
+              {/* BLOCCO AMBIENTE */}
+              <section className="bg-slate-800/20 p-6 rounded-[32px] border border-slate-700/30 space-y-4">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-3">
+                    <Thermometer size={18} className="text-emerald-400"/>
+                    <h2 className="text-sm font-bold text-white uppercase tracking-wider">Parametri Ambientali</h2>
+                  </div>
+                  <button 
+                    onClick={fetchWeather} 
+                    disabled={weatherLoading}
+                    className="px-4 py-2 bg-emerald-600/10 text-emerald-400 hover:bg-emerald-600 hover:text-white rounded-xl text-[10px] font-black flex items-center gap-2 transition-all border border-emerald-500/20"
+                  >
+                    {weatherLoading ? <Loader2 className="animate-spin" size={12}/> : <MapPin size={12}/>}
+                    RILEVA METEO LIVE
+                  </button>
+                </div>
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                  <InputGroup label="Temp (°C)" value={data.temperature} onChange={(e) => setData({...data, temperature: e.target.value === '' ? '' : parseFloat(e.target.value)})} type="number" step="0.1" icon={<Thermometer size={14}/>} />
+                  <InputGroup label="Press (hPa/mbar)" value={data.pressure} onChange={(e) => setData({...data, pressure: e.target.value === '' ? '' : parseFloat(e.target.value)})} type="number" step="0.1" icon={<Wind size={14}/>} />
+                  <InputGroup label="Fattore Z (Calculated)" value={data.zFactor} onChange={() => {}} readOnly type="number" unit="Z" icon={<Settings2 size={14}/>} />
+                </div>
               </section>
 
-              {/* AMBIENTE & ISO */}
-              <section className="space-y-6">
-                <div className="bg-slate-800/20 p-6 rounded-3xl border border-slate-700/30 space-y-4 relative">
-                  <div className="flex items-center justify-between mb-2">
-                    <div className="flex items-center gap-3">
-                      <Thermometer size={16} className="text-emerald-400"/>
-                      <h2 className="text-xs font-bold text-slate-300 uppercase">Ambiente</h2>
-                    </div>
-                    <button 
-                      onClick={fetchWeather} 
-                      disabled={weatherLoading}
-                      className="px-3 py-1.5 bg-emerald-600/20 text-emerald-400 hover:bg-emerald-600 hover:text-white rounded-lg text-[10px] font-bold flex items-center gap-2 transition-all disabled:opacity-50"
-                    >
-                      {weatherLoading ? <Loader2 className="animate-spin" size={12}/> : <MapPin size={12}/>}
-                      RILEVA METEO LIVE
-                    </button>
-                  </div>
-                  <div className="grid grid-cols-2 gap-4">
-                    <InputGroup label="Temp (°C)" value={data.temperature} onChange={(e) => setData({...data, temperature: e.target.value === '' ? '' : parseFloat(e.target.value)})} type="number" step="0.1" />
-                    <InputGroup label="Press (hPa/mbar)" value={data.pressure} onChange={(e) => setData({...data, pressure: e.target.value === '' ? '' : parseFloat(e.target.value)})} type="number" step="0.1" />
-                  </div>
-                  <InputGroup label="Z Factor (Calcolato)" value={data.zFactor} onChange={() => {}} readOnly type="number" unit="Z" />
+              {/* BLOCCO TOLLERANZE */}
+              <section className="bg-slate-800/20 p-6 rounded-[32px] border border-slate-700/30">
+                <div className="flex items-center gap-3 mb-6">
+                  <ShieldAlert size={18} className="text-amber-400"/>
+                  <h2 className="text-sm font-bold text-white uppercase tracking-wider">Limiti di Tolleranza</h2>
                 </div>
-                <div className="bg-slate-800/20 p-6 rounded-3xl border border-slate-700/30 grid grid-cols-2 gap-4">
-                   <InputGroup label="Tolleranza E (µl)" value={data.toleranceSystematic} onChange={(e) => setData({...data, toleranceSystematic: e.target.value === '' ? '' : parseFloat(e.target.value)})} type="number" step="0.01" />
-                   <InputGroup label="Tolleranza SD (µl)" value={data.toleranceRandom} onChange={(e) => setData({...data, toleranceRandom: e.target.value === '' ? '' : parseFloat(e.target.value)})} type="number" step="0.01" />
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                   <InputGroup label="Tolleranza Sistematica E (µl)" value={data.toleranceSystematic} onChange={(e) => setData({...data, toleranceSystematic: e.target.value === '' ? '' : parseFloat(e.target.value)})} type="number" step="0.01" />
+                   <InputGroup label="Tolleranza Casuale SD (µl)" value={data.toleranceRandom} onChange={(e) => setData({...data, toleranceRandom: e.target.value === '' ? '' : parseFloat(e.target.value)})} type="number" step="0.01" />
+                </div>
+              </section>
+
+              {/* BLOCCO MISURE - SI ADATTA AUTOMATICAMENTE */}
+              <section className="bg-slate-800/20 p-8 rounded-[40px] border border-slate-700/40 shadow-2xl relative overflow-hidden">
+                <div className="absolute top-0 right-0 p-8 opacity-5">
+                  <Beaker size={120} className="text-white" />
+                </div>
+                
+                <div className="flex items-center gap-4 mb-8">
+                  <div className="p-3 bg-indigo-500/10 rounded-2xl text-indigo-400"><Activity size={24} /></div>
+                  <div>
+                    <h2 className="text-xl font-bold text-white tracking-tight">Rilevazioni Massa</h2>
+                    <p className="text-xs text-slate-500 font-medium uppercase tracking-widest">Input valori in Milligrammi (mg)</p>
+                  </div>
+                </div>
+
+                <MeasurementSection 
+                  {...data} 
+                  fixedData={data.measurementsFixed} 
+                  varMinData={data.measurementsVarMin} 
+                  varMidData={data.measurementsVarMid} 
+                  varMaxData={data.measurementsVarMax} 
+                  onUpdate={(t, i, v) => {
+                    const field = t === 'fixed' ? 'measurementsFixed' : t === 'min' ? 'measurementsVarMin' : t === 'mid' ? 'measurementsVarMid' : 'measurementsVarMax';
+                    const arr = [...(data[field] as any)];
+                    arr[i] = v === '' ? '' : parseFloat(v);
+                    setData({...data, [field]: arr});
+                  }} 
+                  zFactor={data.zFactor} 
+                />
+
+                <div className="mt-12 border-t border-slate-700/50 pt-8">
+                   {data.type === PipetteType.FIXED ? (
+                     <LiveChart data={data.measurementsFixed} target={nominalUl} label="Grafico Volume Fisso" zFactor={Number(data.zFactor) || 1} />
+                   ) : (
+                     <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                        <LiveChart data={data.measurementsVarMin} target={nominalUl * 0.1} label="Trend 10%" zFactor={Number(data.zFactor) || 1} />
+                        <LiveChart data={data.measurementsVarMid} target={nominalUl * 0.5} label="Trend 50%" zFactor={Number(data.zFactor) || 1} />
+                        <LiveChart data={data.measurementsVarMax} target={nominalUl} label="Trend 100%" zFactor={Number(data.zFactor) || 1} />
+                     </div>
+                   )}
                 </div>
               </section>
             </div>
-
-            {/* MISURE */}
-            <section className="bg-slate-800/20 p-6 rounded-3xl border border-slate-700/30">
-              <div className="flex items-center gap-3 mb-6"><Activity size={18} className="text-indigo-400" /><h2 className="text-sm font-bold text-white uppercase tracking-wider">Misure (mg)</h2></div>
-              <MeasurementSection {...data} fixedData={data.measurementsFixed} varMinData={data.measurementsVarMin} varMidData={data.measurementsVarMid} varMaxData={data.measurementsVarMax} onUpdate={(t, i, v) => {
-                const field = t === 'fixed' ? 'measurementsFixed' : t === 'min' ? 'measurementsVarMin' : t === 'mid' ? 'measurementsVarMid' : 'measurementsVarMax';
-                const arr = [...(data[field] as any)];
-                arr[i] = v === '' ? '' : parseFloat(v);
-                setData({...data, [field]: arr});
-              }} zFactor={data.zFactor} />
-              <div className="mt-8">
-                 {data.type === PipetteType.FIXED ? (
-                   <LiveChart data={data.measurementsFixed} target={nominalUl} label="Fissa" zFactor={Number(data.zFactor) || 1} />
-                 ) : (
-                   <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                      <LiveChart data={data.measurementsVarMin} target={nominalUl * 0.1} label="10%" zFactor={Number(data.zFactor) || 1} />
-                      <LiveChart data={data.measurementsVarMid} target={nominalUl * 0.5} label="50%" zFactor={Number(data.zFactor) || 1} />
-                      <LiveChart data={data.measurementsVarMax} target={nominalUl} label="100%" zFactor={Number(data.zFactor) || 1} />
-                   </div>
-                 )}
-              </div>
-            </section>
           </div>
 
-          <div className="sticky bottom-4 left-0 right-0 flex gap-4 bg-slate-900/95 backdrop-blur-xl p-4 rounded-3xl border border-slate-700 shadow-2xl z-20">
-            <button onClick={handlePreviewToggle} className="hidden md:flex flex-1 py-4 rounded-2xl font-bold items-center justify-center gap-2 bg-slate-700 text-white hover:bg-slate-600 transition-all">
-              {showPreview ? <><EyeOff size={18}/> Chiudi Anteprima</> : <><Eye size={18}/> Anteprima</>}
-            </button>
-            <button onClick={handleSave} disabled={saveLoading} className="flex-1 bg-indigo-600 hover:bg-indigo-500 py-4 rounded-2xl font-bold flex items-center justify-center gap-2 transition-all shadow-lg disabled:opacity-50">
-              {saveLoading ? <Loader2 className="animate-spin" size={20}/> : <><Save size={20}/> Salva Cloud</>}
-            </button>
-            <button onClick={() => generatePDF(data)} className="flex-[1.2] bg-violet-600 hover:bg-violet-500 py-4 rounded-2xl font-bold flex items-center justify-center gap-2 transition-all shadow-xl">
-              <Download size={20}/> Scarica PDF
-            </button>
+          {/* ACTIONS BAR (FLOATING) */}
+          <div className="fixed bottom-6 left-0 right-0 flex justify-center z-30 px-6">
+            <div className="flex gap-4 bg-slate-900/90 backdrop-blur-2xl p-3 rounded-[32px] border border-slate-700/50 shadow-2xl max-w-2xl w-full">
+              <button onClick={handlePreviewToggle} className="hidden md:flex flex-1 py-4 rounded-2xl font-black text-[10px] uppercase items-center justify-center gap-2 bg-slate-800 text-white hover:bg-slate-700 transition-all border border-slate-700">
+                {showPreview ? <><EyeOff size={16}/> Chiudi</> : <><Eye size={16}/> Anteprima</>}
+              </button>
+              <button onClick={handleSave} disabled={saveLoading} className="flex-1 bg-indigo-600 hover:bg-indigo-500 py-4 rounded-2xl font-black text-[10px] uppercase flex items-center justify-center gap-2 transition-all shadow-lg shadow-indigo-900/40 disabled:opacity-50">
+                {saveLoading ? <Loader2 className="animate-spin" size={16}/> : <><Save size={16}/> Salva Cloud</>}
+              </button>
+              <button onClick={() => generatePDF(data)} className="flex-[1.2] bg-violet-600 hover:bg-violet-500 py-4 rounded-2xl font-black text-[10px] uppercase flex items-center justify-center gap-2 transition-all shadow-xl shadow-violet-900/40">
+                <Download size={16}/> Scarica Certificato PDF
+              </button>
+            </div>
           </div>
         </div>
 
+        {/* ANTEPRIMA PDF LATERALE */}
         {showPreview && (
-          <div className="w-1/2 bg-slate-950 p-6 animate-in slide-in-from-right duration-500">
-            <div className="w-full h-full rounded-3xl overflow-hidden border border-slate-800 bg-slate-900 relative">
-               <iframe src={previewUrl || ''} className="w-full h-full" title="Preview"></iframe>
-               <button onClick={() => setShowPreview(false)} className="absolute top-4 right-4 p-2 bg-red-600 text-white rounded-xl"><X size={20}/></button>
+          <div className="w-1/2 bg-slate-950 p-6 animate-in slide-in-from-right duration-500 hidden md:block">
+            <div className="w-full h-full rounded-[40px] overflow-hidden border border-slate-800 bg-slate-900 relative shadow-2xl">
+               <iframe src={previewUrl || ''} className="w-full h-full" title="Preview PDF"></iframe>
+               <button onClick={() => setShowPreview(false)} className="absolute top-6 right-6 p-3 bg-red-600 text-white rounded-2xl hover:bg-red-500 shadow-xl transition-all"><X size={20}/></button>
             </div>
           </div>
         )}
       </main>
 
-      {/* MODALE DATABASE */}
+      {/* MODALI (CLIENTI / NEW CLIENT) - RIMANGONO INVARIATI */}
       {showDbModal && (
         <div className="fixed inset-0 bg-slate-950/95 backdrop-blur-md z-[100] flex items-center justify-center p-6">
           <div className="bg-slate-900 w-full max-w-6xl h-[85vh] rounded-[40px] border border-slate-800 flex flex-col shadow-2xl overflow-hidden animate-in zoom-in-95">
@@ -396,7 +428,7 @@ const App: React.FC = () => {
               <h2 className="text-xl font-bold flex items-center gap-3"><Database size={24} className="text-violet-500" /> Archivio Cloud Clienti</h2>
               <div className="flex gap-2">
                 <input type="file" ref={fileInputRef} onChange={handleCsvImport} accept=".csv" className="hidden" />
-                <button onClick={() => fileInputRef.current?.click()} className="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-xl text-xs font-bold flex items-center gap-2 border border-slate-700 transition-all"><FileSpreadsheet size={16} className="text-emerald-400" /> Importa CSV Clienti</button>
+                <button onClick={() => fileInputRef.current?.click()} className="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-xl text-xs font-bold flex items-center gap-2 border border-slate-700 transition-all"><FileSpreadsheet size={16} className="text-emerald-400" /> Importa CSV</button>
                 <button onClick={() => setShowNewClientModal(true)} className="px-4 py-2 bg-violet-600 hover:bg-violet-500 text-white rounded-xl text-xs font-bold flex items-center gap-2 transition-all shadow-lg"><Plus size={16} /> Nuovo Cliente</button>
                 <button onClick={() => setShowDbModal(false)} className="p-2 hover:bg-slate-800 rounded-xl transition-colors"><X size={24}/></button>
               </div>
@@ -495,17 +527,16 @@ const App: React.FC = () => {
         </div>
       )}
 
-      {/* MODAL NUOVO CLIENTE */}
       {showNewClientModal && (
         <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-[110] flex items-center justify-center p-6">
           <div className="bg-slate-800 w-full max-w-md p-8 rounded-[32px] border border-slate-700 shadow-2xl animate-in fade-in zoom-in-95 duration-200">
              <h3 className="text-xl font-bold text-white mb-2">Crea Nuovo Cliente</h3>
-             <p className="text-sm text-slate-400 mb-6">Inserisci la ragione sociale o il nome del cliente per l'archivio.</p>
+             <p className="text-sm text-slate-400 mb-6">Inserisci la ragione sociale per l'archivio.</p>
              <input 
                autoFocus
                type="text" 
                className="w-full bg-slate-900 border border-slate-700 rounded-2xl p-4 text-white mb-6 outline-none focus:border-violet-500 transition-colors"
-               placeholder="Es. Laboratorio Analisi Rossi Srl"
+               placeholder="Es. Laboratorio Rossi Srl"
                value={newClientName}
                onChange={(e) => setNewClientName(e.target.value)}
                onKeyDown={(e) => e.key === 'Enter' && handleCreateClient()}
