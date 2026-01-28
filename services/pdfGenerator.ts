@@ -93,6 +93,120 @@ const getTheme = (options: PdfOptions): ThemeColors => {
   return BASE_THEMES[options.colorTheme as keyof typeof BASE_THEMES] || BASE_THEMES.default;
 };
 
+const drawStatsCard = (
+  doc: jsPDF, 
+  x: number, 
+  y: number, 
+  w: number, 
+  h: number, 
+  label: string, 
+  value: string, 
+  unit: string, 
+  colors: ThemeColors, 
+  status?: 'pass' | 'fail', 
+  tolUsage?: number
+) => {
+  // Card Background
+  doc.setFillColor(252, 252, 252);
+  doc.setDrawColor(230, 230, 230);
+  doc.roundedRect(x, y, w, h, 3, 3, 'FD');
+
+  // Label
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(7);
+  doc.setTextColor(120, 120, 120);
+  doc.text(label.toUpperCase(), x + 4, y + 8);
+
+  // Status Badge
+  if (status) {
+    const isPass = status === 'pass';
+    doc.setFillColor(...(isPass ? colors.success : colors.fail));
+    doc.roundedRect(x + w - 18, y + 5, 14, 5, 1, 1, 'F');
+    doc.setTextColor(255, 255, 255);
+    doc.setFontSize(5);
+    doc.text(isPass ? 'IN SPEC' : 'OUT SPEC', x + w - 11, y + 8.5, { align: 'center' });
+  }
+
+  // Value
+  doc.setFontSize(11);
+  doc.setTextColor(40, 40, 40);
+  const valX = x + 4;
+  const valY = y + 20;
+  doc.text(value, valX, valY);
+  
+  // Unit
+  const valWidth = doc.getTextWidth(value);
+  doc.setFontSize(7);
+  doc.setTextColor(150, 150, 150);
+  doc.text(unit, valX + valWidth + 1, valY);
+
+  // Progress Bar (Tolerance Usage)
+  if (tolUsage !== undefined) {
+    const barX = x + 4;
+    const barY = y + 26;
+    const barW = w - 8;
+    const barH = 1.5;
+    
+    // Track
+    doc.setFillColor(240, 240, 240);
+    doc.rect(barX, barY, barW, barH, 'F');
+    
+    // Fill
+    const fillW = Math.min(barW, (tolUsage / 100) * barW);
+    const fillCol = tolUsage > 100 ? colors.fail : tolUsage > 80 ? [245, 158, 11] as ColorTuple : colors.success;
+    doc.setFillColor(...fillCol);
+    doc.rect(barX, barY, fillW, barH, 'F');
+
+    // Usage text
+    doc.setFontSize(5);
+    doc.setTextColor(180, 180, 180);
+    doc.text(`USO: ${tolUsage.toFixed(0)}%`, x + w - 4, barY - 1, { align: 'right' });
+  }
+};
+
+const drawStatsDashboard = (
+  doc: jsPDF, 
+  curY: number, 
+  stats: CalculatedStats, 
+  nominalVol: number, 
+  tolSys: number | '', 
+  tolRand: number | '', 
+  colors: ThemeColors,
+  title: string
+) => {
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(9);
+  doc.setTextColor(...colors.primary);
+  doc.text(title.toUpperCase(), 14, curY);
+  
+  const startY = curY + 4;
+  const cardW = 35;
+  const cardH = 32;
+  const gap = 2;
+
+  // 1. Volume Medio
+  drawStatsCard(doc, 14, startY, cardW, cardH, "Vol. Medio", fmt(stats.meanVolume, 3), "µl", colors);
+
+  // 2. Errore Sist. (E)
+  const isPassE = tolSys === '' ? 'pass' : (Math.abs(stats.inaccuracy) <= tolSys ? 'pass' : 'fail');
+  const usageE = tolSys ? (Math.abs(stats.inaccuracy) / tolSys) * 100 : undefined;
+  drawStatsCard(doc, 14 + (cardW + gap), startY, cardW, cardH, "Err. Sist. (E)", fmt(stats.inaccuracy, 3), "µl", colors, isPassE, usageE);
+
+  // 3. Errore Rel. (E%)
+  const ePct = nominalVol > 0 ? (stats.inaccuracy / nominalVol) * 100 : 0;
+  drawStatsCard(doc, 14 + (cardW + gap) * 2, startY, cardW, cardH, "Err. Rel. (E%)", fmt(ePct, 2), "%", colors);
+
+  // 4. Imprecisione (SD)
+  const isPassSD = tolRand === '' ? 'pass' : (stats.sd <= tolRand ? 'pass' : 'fail');
+  const usageSD = tolRand ? (stats.sd / tolRand) * 100 : undefined;
+  drawStatsCard(doc, 14 + (cardW + gap) * 3, startY, cardW, cardH, "Imprec. (SD)", fmt(stats.sd, 4), "µl", colors, isPassSD, usageSD);
+
+  // 5. Incertezza (k=2)
+  drawStatsCard(doc, 14 + (cardW + gap) * 4, startY, cardW, cardH, "Incert. (k=2)", fmt(stats.uncertainty, 3), "µl", colors);
+
+  return startY + cardH + 10;
+};
+
 const drawChart = (doc: jsPDF, title: string, data: number[], startX: number, startY: number, width: number, height: number, color: [number, number, number], targetVolume: number, stats?: { meanVolume: number, sd: number }, manualYMin?: number | '', manualYMax?: number | '') => {
   if (data.length === 0) return;
   const chartX = startX + 12;
@@ -123,11 +237,9 @@ const drawChart = (doc: jsPDF, title: string, data: number[], startX: number, st
   const range = yMax - yMin;
   const mapY = (v: number) => range === 0 ? chartY + (chartH/2) : (chartY + chartH) - (((v - yMin) / range) * chartH);
 
-  // Sfondo pulito
   doc.setFillColor(252, 252, 252);
   doc.rect(chartX, chartY, chartW, chartH, 'F');
 
-  // Griglia orizzontale
   doc.setDrawColor(220, 220, 220); doc.setLineWidth(0.1); doc.setLineDashPattern([1, 1], 0);
   for (let i = 0; i <= 4; i++) {
     const frac = i / 4; const yp = (chartY + chartH) - (frac * chartH); const lv = yMin + (frac * range);
@@ -136,8 +248,6 @@ const drawChart = (doc: jsPDF, title: string, data: number[], startX: number, st
   }
   doc.setLineDashPattern([], 0);
 
-  // Rimosso il rettangolo scuro della SD (schifezza nera). 
-  // Al suo posto, usiamo solo le linee tratteggiate per l'intervallo di incertezza se necessario.
   if (stats && stats.sd > 0) {
     doc.setDrawColor(color[0], color[1], color[2]); doc.setLineWidth(0.1); doc.setLineDashPattern([2, 2], 0);
     const up = mapY(stats.meanVolume + 2*stats.sd); const lo = mapY(stats.meanVolume - 2*stats.sd);
@@ -146,14 +256,12 @@ const drawChart = (doc: jsPDF, title: string, data: number[], startX: number, st
     doc.setLineDashPattern([], 0);
   }
 
-  // Linea Target
   const ty = mapY(targetVolume);
   if (ty >= chartY && ty <= chartY + chartH) { 
     doc.setDrawColor(180, 180, 180); doc.setLineWidth(0.3); doc.setLineDashPattern([3, 2], 0); 
     doc.line(chartX, ty, chartX + chartW, ty); doc.setLineDashPattern([], 0); 
   }
 
-  // Plot dei dati
   if (data.length > 0) {
     doc.setDrawColor(...color); doc.setLineWidth(0.6);
     const xs = chartW / (data.length > 1 ? data.length - 1 : 1);
@@ -164,7 +272,6 @@ const drawChart = (doc: jsPDF, title: string, data: number[], startX: number, st
     });
   }
 
-  // Bordo finale grafico
   doc.setDrawColor(200, 200, 200); doc.setLineWidth(0.2);
   doc.rect(chartX, chartY, chartW, chartH, 'S');
 };
@@ -178,7 +285,6 @@ export const createCalibrationPDF = (data: CalibrationData, returnBlob = false):
   let nominalVolUl = parseNominal(data.nominalVolume);
   if (data.nominalVolumeUnit === 'ml') nominalVolUl *= 1000;
 
-  // Header Professionale
   doc.setFillColor(...colors.primary); doc.rect(0, 0, 210, 3, 'F');
   doc.setFont('helvetica', 'bold'); doc.setFontSize(28); doc.setTextColor(40); doc.text('2S', 14, 20);
   doc.setFontSize(16); doc.setTextColor(...colors.textDark); doc.text('CERTIFICATO DI TARATURA', 55, 15);
@@ -211,36 +317,26 @@ export const createCalibrationPDF = (data: CalibrationData, returnBlob = false):
   const statsMax = calculateStats(data.measurementsVarMax, zFactor, targetMax);
 
   if (data.type === PipetteType.FIXED) {
-    if (pdfOpts.includeCharts) drawChart(doc, "Stabilità del Volume Erogato", statsFixed.volumes, 14, curY, 182, 60, colors.accent, nominalVolUl, statsFixed);
-    curY += 75;
-    autoTable(doc, { 
-      startY: curY, 
-      head: [['Parametro Statistico', 'Valore Rilevato', 'Unità']], 
-      body: [
-        ['Volume Medio Calcolato', fmt(statsFixed.meanVolume, 3), 'µl'], 
-        ['Errore Sistematico (Inaccuratezza)', fmt(statsFixed.inaccuracy, 3), 'µl'],
-        ['E% (Errore Relativo)', fmtPct(statsFixed.inaccuracy, nominalVolUl), '%'],
-        ['Deviazione Standard (Imprecisione)', fmt(statsFixed.sd, 4), 'µl'],
-        ['Incertezza Estesa (k=2)', fmt(statsFixed.uncertainty, 3), 'µl']
-      ], 
-      theme: 'grid', 
-      headStyles: { fillColor: colors.primary, fontSize: 8 },
-      styles: { fontSize: 8, cellPadding: 2 }
-    });
+    // DASHBOARD STATISTICO LIVE VISIVO
+    curY = drawStatsDashboard(doc, curY, statsFixed, nominalVolUl, data.toleranceSystematic, data.toleranceRandom, colors, "Analisi Statistica Live");
+    
+    if (pdfOpts.includeCharts) {
+      drawChart(doc, "Stabilità del Volume Erogato", statsFixed.volumes, 14, curY, 182, 50, colors.accent, nominalVolUl, statsFixed);
+      curY += 65;
+    }
   } else {
-    autoTable(doc, { 
-      startY: curY, 
-      head: [['Volume Test', 'Media (µl)', 'E (%)', 'SD (µl)', 'Stato']], 
-      body: [
-        [`Min (${targetMin})`, fmt(statsMin.meanVolume, 2), fmtPct(statsMin.inaccuracy, targetMin), fmt(statsMin.sd, 3), (Math.abs(statsMin.inaccuracy) <= (Number(data.toleranceSystematic) || 999)) ? 'PASS' : 'FAIL'], 
-        [`Mid (${targetMid})`, fmt(statsMid.meanVolume, 2), fmtPct(statsMid.inaccuracy, targetMid), fmt(statsMid.sd, 3), (Math.abs(statsMid.inaccuracy) <= (Number(data.toleranceSystematic) || 999)) ? 'PASS' : 'FAIL'], 
-        [`Max (${targetMax})`, fmt(statsMax.meanVolume, 2), fmtPct(statsMax.inaccuracy, targetMax), fmt(statsMax.sd, 3), (Math.abs(statsMax.inaccuracy) <= (Number(data.toleranceSystematic) || 999)) ? 'PASS' : 'FAIL']
-      ], 
-      theme: 'grid', 
-      headStyles: { fillColor: colors.primary, fontSize: 8 },
-      styles: { fontSize: 8 }
-    });
+    // Per variabile disegniamo i 3 dashboard in sequenza (più compatti se necessario)
+    curY = drawStatsDashboard(doc, curY, statsMin, targetMin, data.toleranceSystematic, data.toleranceRandom, colors, "Volume Minimo (10%)");
+    curY = drawStatsDashboard(doc, curY, statsMid, targetMid, data.toleranceSystematic, data.toleranceRandom, colors, "Volume Medio (50%)");
+    curY = drawStatsDashboard(doc, curY, statsMax, targetMax, data.toleranceSystematic, data.toleranceRandom, colors, "Volume Massimo (100%)");
   }
+
+  // Sezione Firme in fondo
+  doc.setFontSize(8);
+  doc.setTextColor(150);
+  doc.text("Il presente certificato garantisce che lo strumento è stato testato secondo i parametri ISO 8655.", 14, 280);
+  doc.line(14, 275, 80, 275); doc.text("Firma Operatore", 14, 278);
+  doc.line(130, 275, 196, 275); doc.text("Firma Responsabile Qualità", 130, 278);
 
   if (returnBlob) return doc.output('bloburl');
   doc.save(`certificato_${data.serialNumber || 'pipetta'}.pdf`);
