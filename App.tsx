@@ -131,21 +131,42 @@ const App: React.FC = () => {
   };
 
   const handleCreateClient = async () => {
-    if (!newClientName.trim()) return;
-    const { data: c, error } = await supabase.from('clients').insert([{ name: newClientName.trim() }]).select().single();
-    if (error) { setNotification({ message: error.message, type: 'error', visible: true }); } 
-    else { fetchClients(); setSelectedClientId(c.id); setNewClientName(""); setShowNewClientModal(false); setNotification({ message: "Cliente creato con successo", type: 'success', visible: true }); }
+    if (!newClientName.trim() || !session?.user.id) return;
+    const { data: c, error } = await supabase
+      .from('clients')
+      .insert([{ 
+        name: newClientName.trim(),
+        user_id: session.user.id // Inseriamo il user_id per soddisfare il vincolo DB
+      }])
+      .select()
+      .single();
+    
+    if (error) { 
+      setNotification({ message: error.message, type: 'error', visible: true }); 
+    } 
+    else { 
+      fetchClients(); 
+      setSelectedClientId(c.id); 
+      setNewClientName(""); 
+      setShowNewClientModal(false); 
+      setNotification({ message: "Cliente creato con successo", type: 'success', visible: true }); 
+    }
   };
 
   const handleCsvImport = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
-    if (!file) return;
+    if (!file || !session?.user.id) return;
 
     const reader = new FileReader();
     reader.onload = async (event) => {
       const text = event.target?.result as string;
       const rows = text.split('\n').map(r => r.trim()).filter(r => r.length > 0);
-      const newClients = rows.map(r => ({ name: r.replace(/"/g, '') }));
+      
+      const newClients = rows.map(r => ({ 
+        name: r.replace(/"/g, ''),
+        user_id: session.user.id // Fondamentale anche qui
+      }));
+      
       const { error } = await supabase.from('clients').insert(newClients);
 
       if (error) setNotification({ message: "Errore importazione: " + error.message, type: 'error', visible: true });
@@ -172,10 +193,12 @@ const App: React.FC = () => {
   const handleSave = async () => {
     if (!selectedClientId) { setShowDbModal(true); setNotification({ message: "Seleziona un cliente prima di salvare", type: 'error', visible: true }); return; }
     if (!data.serialNumber) { setNotification({ message: "Matricola obbligatoria", type: 'error', visible: true }); return; }
+    if (!session?.user.id) return;
     
     setSaveLoading(true);
     const { error } = await supabase.from('pipettes').insert([{
       client_id: selectedClientId,
+      user_id: session.user.id, // Aggiunto per coerenza con lo schema DB
       manufacturer: data.manufacturer,
       model: data.model,
       serial_number: data.serialNumber,
