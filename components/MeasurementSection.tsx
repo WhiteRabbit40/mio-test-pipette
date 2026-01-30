@@ -1,7 +1,8 @@
 
-import React, { ReactNode, useState, useEffect, useRef } from 'react';
+import React, { ReactNode, useState } from 'react';
 import { PipetteType, UiTheme } from '../types';
-import { ArrowDownToLine, ArrowUpToLine, Target, Beaker, CheckCircle2, XCircle, AlertCircle, Gauge, Activity, Percent, Ruler, ShieldCheck, HelpCircle, X } from 'lucide-react';
+import { ArrowDownToLine, ArrowUpToLine, Target, Beaker, Gauge, Activity, Percent, ShieldCheck, HelpCircle } from 'lucide-react';
+import { LiveChart } from './LiveChart';
 
 interface Props {
   type: PipetteType;
@@ -65,12 +66,11 @@ const MeasurementInputs: React.FC<{
 
 const KpiCard: React.FC<{
   label: string; value: string | number; unit: string; icon: ReactNode; status?: 'pass' | 'fail' | 'neutral';
-  tolerance?: number; currentDiff?: number; explanation: string; theme: UiTheme;
-}> = ({ label, value, unit, icon, status = 'neutral', tolerance, currentDiff, explanation, theme }) => {
+  tolerance?: number; currentDiff?: number; theme: UiTheme;
+}> = ({ label, value, unit, icon, status = 'neutral', tolerance, currentDiff, theme }) => {
   const style = THEME_STYLES[theme];
   const isPass = status === 'pass';
   const isFail = status === 'fail';
-  const [showTooltip, setShowTooltip] = useState(false);
   const usage = (tolerance && currentDiff) ? Math.min(100, (Math.abs(currentDiff) / tolerance) * 100) : 0;
 
   return (
@@ -99,8 +99,8 @@ const KpiCard: React.FC<{
 };
 
 const StatsDashboard: React.FC<{
-  data: (number | '')[]; zFactor: number | ''; targetVol: number; tolSys: number | ''; tolRand: number | ''; theme: UiTheme;
-}> = ({ data, zFactor, targetVol, tolSys, tolRand, theme }) => {
+  data: (number | '')[]; zFactor: number | ''; targetVol: number; tolSys: number | ''; tolRand: number | ''; theme: UiTheme; label: string;
+}> = ({ data, zFactor, targetVol, tolSys, tolRand, theme, label }) => {
   const validNums = data.filter((n): n is number => typeof n === 'number');
   if (validNums.length === 0) return null;
   const z = Number(zFactor) || 1;
@@ -112,14 +112,15 @@ const StatsDashboard: React.FC<{
   const isPassRand = tolRand === '' ? true : sd <= tolRand;
 
   return (
-    <div className="mt-8 animate-in fade-in slide-in-from-top-6 duration-500">
+    <div className="mt-8 space-y-6 animate-in fade-in slide-in-from-top-6 duration-500">
       <div className="grid grid-cols-2 lg:grid-cols-5 gap-4">
-        <KpiCard theme={theme} label="Volume Medio" value={meanVol.toFixed(3)} unit="µl" icon={<Beaker size={16} />} explanation="Volume medio erogato." />
-        <KpiCard theme={theme} label="Err. Sist. (E)" value={inaccuracy.toFixed(3)} unit="µl" icon={<Activity size={16} />} status={isPassSys ? 'pass' : 'fail'} tolerance={Number(tolSys)} currentDiff={inaccuracy} explanation="Differenza dal nominale." />
-        <KpiCard theme={theme} label="Err. Rel. (%)" value={(targetVol > 0 ? (inaccuracy/targetVol)*100 : 0).toFixed(2)} unit="%" icon={<Percent size={16} />} explanation="Errore percentuale." />
-        <KpiCard theme={theme} label="Ripetib. (SD)" value={sd.toFixed(4)} unit="µl" icon={<Gauge size={16} />} status={isPassRand ? 'pass' : 'fail'} tolerance={Number(tolRand)} currentDiff={sd} explanation="Deviazione standard." />
-        <KpiCard theme={theme} label="Incert. (k=2)" value={(sd * 2).toFixed(3)} unit="µl" icon={<ShieldCheck size={16} />} explanation="Incertezza estesa." />
+        <KpiCard theme={theme} label="Volume Medio" value={meanVol.toFixed(3)} unit="µl" icon={<Beaker size={16} />} />
+        <KpiCard theme={theme} label="Err. Sist. (E)" value={inaccuracy.toFixed(3)} unit="µl" icon={<Activity size={16} />} status={isPassSys ? 'pass' : 'fail'} tolerance={Number(tolSys)} currentDiff={inaccuracy} />
+        <KpiCard theme={theme} label="Err. Rel. (%)" value={(targetVol > 0 ? (inaccuracy/targetVol)*100 : 0).toFixed(2)} unit="%" icon={<Percent size={16} />} />
+        <KpiCard theme={theme} label="Ripetib. (SD)" value={sd.toFixed(4)} unit="µl" icon={<Gauge size={16} />} status={isPassRand ? 'pass' : 'fail'} tolerance={Number(tolRand)} currentDiff={sd} />
+        <KpiCard theme={theme} label="Incert. (k=2)" value={(sd * 2).toFixed(3)} unit="µl" icon={<ShieldCheck size={16} />} />
       </div>
+      <LiveChart theme={theme} label={label} target={targetVol} zFactor={z} data={data} />
     </div>
   );
 };
@@ -133,7 +134,7 @@ export const MeasurementSection: React.FC<Props> = ({
       {type === PipetteType.FIXED ? (
         <div>
           <MeasurementInputs theme={theme} zFactor={Number(zFactor)||1} target={nomVol} tol={toleranceSystematic} idPrefix="f" values={measurementsFixed} onChange={(i, v) => onUpdate('fixed', i, v)} label="Volume Fisso (100%)" icon={<Target size={14} />} />
-          <StatsDashboard theme={theme} data={measurementsFixed} zFactor={zFactor} targetVol={nomVol} tolSys={toleranceSystematic} tolRand={toleranceRandom} />
+          <StatsDashboard theme={theme} data={measurementsFixed} zFactor={zFactor} targetVol={nomVol} tolSys={toleranceSystematic} tolRand={toleranceRandom} label="Volume Fisso" />
         </div>
       ) : (
         <div className="space-y-12">
@@ -144,7 +145,7 @@ export const MeasurementSection: React.FC<Props> = ({
           ].map(s => (
             <div key={s.id} className="space-y-4">
               <MeasurementInputs theme={theme} zFactor={Number(zFactor)||1} target={s.t} tol={toleranceSystematic} idPrefix={s.id} values={s.v} onChange={(i, v) => onUpdate(s.id as any, i, v)} label={s.l} icon={s.i} />
-              <StatsDashboard theme={theme} data={s.v} zFactor={zFactor} targetVol={s.t} tolSys={toleranceSystematic} tolRand={toleranceRandom} />
+              <StatsDashboard theme={theme} data={s.v} zFactor={zFactor} targetVol={s.t} tolSys={toleranceSystematic} tolRand={toleranceRandom} label={s.l} />
             </div>
           ))}
         </div>

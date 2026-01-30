@@ -34,48 +34,15 @@ const BASE_THEMES: Record<string, ThemeColors> = {
 
 const getThemeColors = (theme: string = 'violet'): ThemeColors => BASE_THEMES[theme] || BASE_THEMES.violet;
 
-/**
- * Disegna l'intestazione premium con il nuovo logo "2S" e nome azienda
- */
 const drawHeader = (doc: jsPDF, colors: ThemeColors, title: string) => {
-  const x = 14;
-  const y = 15;
-
-  // Logo "2S" Stilizzato (Design geometrico premium)
-  doc.setFillColor(...colors.primary);
-  doc.roundedRect(x, y, 14, 14, 3, 3, 'F');
-  
-  doc.setDrawColor(...colors.primary);
-  doc.setLineWidth(0.8);
-  doc.roundedRect(x + 2, y + 2, 14, 14, 3, 3, 'S');
-
-  doc.setTextColor(255, 255, 255);
-  doc.setFont('helvetica', 'bold');
-  doc.setFontSize(11);
-  doc.text('2S', x + 7, y + 9.5, { align: 'center' });
-
-  // Nome Azienda: Strumentazione & Servizi
-  doc.setTextColor(...colors.textDark);
-  doc.setFontSize(16);
-  doc.setFont('helvetica', 'bold');
-  doc.text('STRUMENTAZIONE & SERVIZI', x + 20, y + 7);
-  
-  doc.setTextColor(...colors.textLight);
-  doc.setFontSize(8);
-  doc.setFont('helvetica', 'normal');
-  doc.text('SOLUZIONI AVANZATE PER IL LABORATORIO', x + 20, y + 12);
-
-  // Titolo Documento
-  doc.setTextColor(...colors.accent);
-  doc.setFontSize(10);
-  doc.setFont('helvetica', 'bold');
-  doc.text(title.toUpperCase(), 196, y + 9.5, { align: 'right' });
-
-  // Linea divisoria
-  doc.setDrawColor(...colors.divider);
-  doc.setLineWidth(0.3);
-  doc.line(x, y + 18, 196, y + 18);
-
+  const x = 14, y = 15;
+  doc.setFillColor(...colors.primary); doc.roundedRect(x, y, 14, 14, 3, 3, 'F');
+  doc.setDrawColor(...colors.primary); doc.setLineWidth(0.8); doc.roundedRect(x + 2, y + 2, 14, 14, 3, 3, 'S');
+  doc.setTextColor(255, 255, 255); doc.setFont('helvetica', 'bold'); doc.setFontSize(11); doc.text('2S', x + 7, y + 9.5, { align: 'center' });
+  doc.setTextColor(...colors.textDark); doc.setFontSize(16); doc.setFont('helvetica', 'bold'); doc.text('STRUMENTAZIONE & SERVIZI', x + 20, y + 7);
+  doc.setTextColor(...colors.textLight); doc.setFontSize(8); doc.setFont('helvetica', 'normal'); doc.text('SOLUZIONI AVANZATE PER IL LABORATORIO', x + 20, y + 12);
+  doc.setTextColor(...colors.accent); doc.setFontSize(10); doc.setFont('helvetica', 'bold'); doc.text(title.toUpperCase(), 196, y + 9.5, { align: 'right' });
+  doc.setDrawColor(...colors.divider); doc.setLineWidth(0.3); doc.line(x, y + 18, 196, y + 18);
   return y + 28;
 };
 
@@ -87,6 +54,59 @@ const calculateStats = (measurements: (number | '')[], zFactor: number, nominalV
   const meanVolume = meanMass * zFactor;
   const sd = Math.sqrt(valid.length > 1 ? volumes.map(v => Math.pow(v - meanVolume, 2)).reduce((a, b) => a + b, 0) / (valid.length - 1) : 0);
   return { meanMass, meanVolume, count: valid.length, volumes, sd, inaccuracy: nominalVolUl > 0 ? meanVolume - nominalVolUl : 0, uncertainty: 2 * sd };
+};
+
+const drawPdfChart = (doc: jsPDF, x: number, y: number, w: number, h: number, stats: CalculatedStats, target: number, colors: ThemeColors) => {
+  const volumes = stats.volumes;
+  if (volumes.length === 0) return;
+
+  // Background box
+  doc.setFillColor(252, 252, 252);
+  doc.setDrawColor(240, 240, 240);
+  doc.roundedRect(x, y, w, h, 2, 2, 'FD');
+
+  const padding = 6;
+  const chartW = w - padding * 2;
+  const chartH = h - padding * 2;
+  const startX = x + padding;
+  const startY = y + padding;
+
+  // Scale calculations
+  const allPoints = [...volumes, target];
+  let min = Math.min(...allPoints);
+  let max = Math.max(...allPoints);
+  const spread = max - min || target * 0.01;
+  min -= spread * 0.2;
+  max += spread * 0.2;
+  const range = max - min;
+
+  const getX = (i: number) => startX + (i * chartW / (volumes.length - 1 || 1));
+  const getY = (v: number) => startY + chartH - ((v - min) / range * chartH);
+
+  // Target line (dashed)
+  doc.setDrawColor(200, 200, 200);
+  doc.setLineWidth(0.2);
+  doc.setLineDashPattern([2, 1], 0);
+  doc.line(startX, getY(target), startX + chartW, getY(target));
+  doc.setLineDashPattern([], 0);
+
+  // Trend line
+  doc.setDrawColor(...colors.accent);
+  doc.setLineWidth(0.5);
+  for (let i = 0; i < volumes.length - 1; i++) {
+    doc.line(getX(i), getY(volumes[i]), getX(i + 1), getY(volumes[i + 1]));
+  }
+
+  // Data points
+  doc.setFillColor(...colors.accent);
+  volumes.forEach((v, i) => {
+    doc.circle(getX(i), getY(v), 0.6, 'F');
+  });
+
+  // Small label
+  doc.setFontSize(5);
+  doc.setTextColor(180, 180, 180);
+  doc.text("ANDAMENTO MISURE", startX, startY - 2);
 };
 
 const drawStatsCard = (doc: jsPDF, x: number, y: number, w: number, h: number, label: string, value: string, unit: string, colors: ThemeColors, tolUsage?: number) => {
@@ -102,15 +122,21 @@ const drawStatsCard = (doc: jsPDF, x: number, y: number, w: number, h: number, l
   }
 };
 
-const drawStatsDashboard = (doc: jsPDF, curY: number, stats: CalculatedStats, nominalVol: number, tolSys: number | '', tolRand: number | '', colors: ThemeColors, title: string) => {
+const drawStatsDashboard = (doc: jsPDF, curY: number, stats: CalculatedStats, targetVol: number, tolSys: number | '', tolRand: number | '', colors: ThemeColors, title: string) => {
   doc.setFont('helvetica', 'bold'); doc.setFontSize(9); doc.setTextColor(...colors.primary); doc.text(title.toUpperCase(), 14, curY);
   const startY = curY + 4, cardW = 35, cardH = 32, gap = 2;
+  
+  // Cards
   drawStatsCard(doc, 14, startY, cardW, cardH, "Vol. Medio", fmt(stats.meanVolume, 3), "µl", colors);
   drawStatsCard(doc, 14 + (cardW + gap), startY, cardW, cardH, "Err. Sist. (E)", fmt(stats.inaccuracy, 3), "µl", colors, tolSys ? (Math.abs(stats.inaccuracy) / tolSys) * 100 : undefined);
-  drawStatsCard(doc, 14 + (cardW + gap) * 2, startY, cardW, cardH, "Err. Rel. (E%)", fmt(nominalVol > 0 ? (stats.inaccuracy/nominalVol)*100 : 0, 2), "%", colors);
+  drawStatsCard(doc, 14 + (cardW + gap) * 2, startY, cardW, cardH, "Err. Rel. (E%)", fmt(targetVol > 0 ? (stats.inaccuracy/targetVol)*100 : 0, 2), "%", colors);
   drawStatsCard(doc, 14 + (cardW + gap) * 3, startY, cardW, cardH, "Imprec. (SD)", fmt(stats.sd, 4), "µl", colors, tolRand ? (stats.sd / tolRand) * 100 : undefined);
   drawStatsCard(doc, 14 + (cardW + gap) * 4, startY, cardW, cardH, "Incert. (k=2)", fmt(stats.uncertainty, 3), "µl", colors);
-  return startY + cardH + 10;
+
+  // Integrated Chart below cards
+  drawPdfChart(doc, 14, startY + cardH + 2, 183, 20, stats, targetVol, colors);
+
+  return startY + cardH + 28;
 };
 
 export const createCalibrationPDF = (data: CalibrationData, returnBlob = false): any => {
@@ -164,33 +190,10 @@ export const getPDFPreviewURL = (data: CalibrationData) => createCalibrationPDF(
 export const generateClientListPDF = (clientName: string, pipettes: StoredPipette[], uiTheme: UiTheme = 'violet') => {
   const doc = new jsPDF();
   const colors = getThemeColors(uiTheme);
-
   let curY = drawHeader(doc, colors, "Elenco Strumentazione");
-
-  doc.setFontSize(10);
-  doc.setTextColor(...colors.textDark);
-  doc.text(`CLIENTE: ${clientName.toUpperCase()}`, 14, curY);
-  doc.setFontSize(8);
-  doc.setTextColor(...colors.textLight);
-  doc.text(`Estratto il: ${new Date().toLocaleDateString('it-IT')}`, 14, curY + 6);
-
-  const tableData = pipettes.map(p => [
-    p.manufacturer || '-',
-    p.model || '-',
-    p.serial_number || '-',
-    p.nominal_volume || '-',
-    new Date(p.last_calibrated).toLocaleDateString('it-IT')
-  ]);
-
-  autoTable(doc, {
-    startY: curY + 12,
-    head: [['COSTRUTTORE', 'MODELLO', 'MATRICOLA (S/N)', 'VOLUME', 'DATA TARATURA']],
-    body: tableData,
-    theme: 'grid',
-    headStyles: { fillColor: colors.primary, textColor: [255, 255, 255], fontSize: 8, fontStyle: 'bold' },
-    styles: { fontSize: 8, cellPadding: 4 },
-    columnStyles: { 2: { fontStyle: 'bold' } }
-  });
-
+  doc.setFontSize(10); doc.setTextColor(...colors.textDark); doc.text(`CLIENTE: ${clientName.toUpperCase()}`, 14, curY);
+  doc.setFontSize(8); doc.setTextColor(...colors.textLight); doc.text(`Estratto il: ${new Date().toLocaleDateString('it-IT')}`, 14, curY + 6);
+  const tableData = pipettes.map(p => [p.manufacturer || '-', p.model || '-', p.serial_number || '-', p.nominal_volume || '-', new Date(p.last_calibrated).toLocaleDateString('it-IT')]);
+  autoTable(doc, { startY: curY + 12, head: [['COSTRUTTORE', 'MODELLO', 'MATRICOLA (S/N)', 'VOLUME', 'DATA TARATURA']], body: tableData, theme: 'grid', headStyles: { fillColor: colors.primary, textColor: [255, 255, 255], fontSize: 8, fontStyle: 'bold' }, styles: { fontSize: 8, cellPadding: 4 }, columnStyles: { 2: { fontStyle: 'bold' } } });
   doc.save(`elenco_${clientName.replace(/\s/g, '_').toLowerCase()}.pdf`);
 };
