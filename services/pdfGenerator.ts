@@ -1,9 +1,8 @@
 
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
-import { CalibrationData, PipetteType, CalculatedStats, PdfTheme, StoredPipette, PdfOptions, UiTheme } from '../types';
+import { CalibrationData, PipetteType, CalculatedStats, StoredPipette, UiTheme } from '../types';
 
-// Helper to format numbers
 const fmt = (num: number | string | undefined, decimals = 4) => {
   if (num === '' || num === undefined || isNaN(Number(num))) return '-';
   return Number(num).toFixed(decimals);
@@ -14,80 +13,70 @@ const parseNominal = (val: string): number => {
   return match ? parseFloat(match[0]) : 0;
 };
 
-const hexToRgb = (hex: string): [number, number, number] => {
-  const result = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(hex);
-  return result 
-    ? [parseInt(result[1], 16), parseInt(result[2], 16), parseInt(result[3], 16)] 
-    : [0, 0, 0];
-};
-
 type ColorTuple = [number, number, number];
 
 interface ThemeColors {
   primary: ColorTuple;
   accent: ColorTuple;
-  blue: ColorTuple;
   textDark: ColorTuple;
-  textMed: ColorTuple;
   textLight: ColorTuple;
   divider: ColorTuple;
-  bgLight: ColorTuple;
   success: ColorTuple;
   fail: ColorTuple;
 }
 
 const BASE_THEMES: Record<string, ThemeColors> = {
-  violet: { primary: [76, 29, 149], accent: [124, 58, 237], blue: [59, 130, 246], textDark: [15, 23, 42], textMed: [51, 65, 85], textLight: [100, 116, 139], divider: [226, 232, 240], bgLight: [248, 250, 252], success: [22, 163, 74], fail: [220, 38, 38] },
-  teal: { primary: [13, 148, 136], accent: [20, 184, 166], blue: [45, 212, 191], textDark: [17, 24, 39], textMed: [55, 65, 81], textLight: [107, 114, 128], divider: [229, 231, 235], bgLight: [240, 253, 250], success: [5, 150, 105], fail: [220, 38, 38] },
-  sky: { primary: [2, 132, 199], accent: [14, 165, 233], blue: [56, 189, 248], textDark: [17, 24, 39], textMed: [55, 65, 81], textLight: [107, 114, 128], divider: [229, 231, 235], bgLight: [240, 249, 255], success: [5, 150, 105], fail: [220, 38, 38] },
-  blue: { primary: [30, 58, 138], accent: [37, 99, 235], blue: [96, 165, 250], textDark: [17, 24, 39], textMed: [55, 65, 81], textLight: [107, 114, 128], divider: [229, 231, 235], bgLight: [249, 250, 251], success: [5, 150, 105], fail: [220, 38, 38] }
+  violet: { primary: [76, 29, 149], accent: [124, 58, 237], textDark: [15, 23, 42], textLight: [100, 116, 139], divider: [226, 232, 240], success: [22, 163, 74], fail: [220, 38, 38] },
+  teal: { primary: [13, 148, 136], accent: [20, 184, 166], textDark: [17, 24, 39], textLight: [107, 114, 128], divider: [229, 231, 235], success: [5, 150, 105], fail: [220, 38, 38] },
+  sky: { primary: [2, 132, 199], accent: [14, 165, 233], textDark: [17, 24, 39], textLight: [107, 114, 128], divider: [229, 231, 235], success: [5, 150, 105], fail: [220, 38, 38] },
+  blue: { primary: [30, 58, 138], accent: [37, 99, 235], textDark: [17, 24, 39], textLight: [107, 114, 128], divider: [229, 231, 235], success: [5, 150, 105], fail: [220, 38, 38] }
 };
 
 const getThemeColors = (theme: string = 'violet'): ThemeColors => BASE_THEMES[theme] || BASE_THEMES.violet;
 
 /**
- * Draws the "Fancier" 2S Logo and Company Name
+ * Disegna l'intestazione premium con il nuovo logo "2S" e nome azienda
  */
 const drawHeader = (doc: jsPDF, colors: ThemeColors, title: string) => {
   const x = 14;
   const y = 15;
 
-  // Modern Boxed Logo "2S"
+  // Logo "2S" Stilizzato (Design geometrico premium)
   doc.setFillColor(...colors.primary);
-  doc.roundedRect(x, y, 12, 12, 2, 2, 'F');
+  doc.roundedRect(x, y, 14, 14, 3, 3, 'F');
   
   doc.setDrawColor(...colors.primary);
-  doc.setLineWidth(0.5);
-  doc.roundedRect(x + 2, y + 2, 12, 12, 2, 2, 'S');
+  doc.setLineWidth(0.8);
+  doc.roundedRect(x + 2, y + 2, 14, 14, 3, 3, 'S');
 
   doc.setTextColor(255, 255, 255);
   doc.setFont('helvetica', 'bold');
-  doc.setFontSize(10);
-  doc.text('2S', x + 6, y + 8, { align: 'center' });
+  doc.setFontSize(11);
+  doc.text('2S', x + 7, y + 9.5, { align: 'center' });
 
-  // Company Name "Strumentazione & Servizi"
+  // Nome Azienda: Strumentazione & Servizi
   doc.setTextColor(...colors.textDark);
-  doc.setFontSize(14);
+  doc.setFontSize(16);
   doc.setFont('helvetica', 'bold');
-  doc.text('STRUMENTAZIONE & SERVIZI', x + 18, y + 6);
+  doc.text('STRUMENTAZIONE & SERVIZI', x + 20, y + 7);
   
   doc.setTextColor(...colors.textLight);
-  doc.setFontSize(7);
+  doc.setFontSize(8);
   doc.setFont('helvetica', 'normal');
-  doc.text('TECNOLOGIE E SOLUZIONI PER IL LABORATORIO', x + 18, y + 10);
+  doc.text('SOLUZIONI AVANZATE PER IL LABORATORIO', x + 20, y + 12);
 
-  // Document Title (Right Aligned)
+  // Titolo Documento
   doc.setTextColor(...colors.accent);
-  doc.setFontSize(9);
+  doc.setFontSize(10);
   doc.setFont('helvetica', 'bold');
-  doc.text(title.toUpperCase(), 196, y + 8, { align: 'right' });
+  doc.text(title.toUpperCase(), 196, y + 9.5, { align: 'right' });
 
-  // Divider
+  // Linea divisoria
   doc.setDrawColor(...colors.divider);
-  doc.setLineWidth(0.2);
-  doc.line(x, y + 16, 196, y + 16);
+  doc.setLineWidth(0.3);
+  doc.line(x, y + 18, 196, y + 18);
 
-  return y + 25;
+  return y + 28;
 };
 
 const calculateStats = (measurements: (number | '')[], zFactor: number, nominalVolUl: number): CalculatedStats => {
@@ -148,7 +137,7 @@ export const createCalibrationPDF = (data: CalibrationData, returnBlob = false):
   curY += 16;
   drawField('Data Test', data.testDate, 14, curY, colW);
   drawField('Temp. Ambiente', `${data.temperature} °C`, 14 + colW + 2, curY, colW);
-  drawField('Pressione', `${data.pressure} kPa`, 14 + (colW + 2) * 2, curY, colW);
+  drawField('Pressione', `${data.pressure} hPa`, 14 + (colW + 2) * 2, curY, colW);
   drawField('Fattore Z', fmt(data.zFactor, 5), 14 + (colW + 2) * 3, curY, colW);
 
   curY += 25;
@@ -164,7 +153,7 @@ export const createCalibrationPDF = (data: CalibrationData, returnBlob = false):
     curY = drawStatsDashboard(doc, curY, statsMax, nominalVolUl, data.toleranceSystematic, data.toleranceRandom, colors, "Volume Massimo (100%)");
   }
 
-  doc.setFontSize(7); doc.setTextColor(150); doc.text("Certificato generato digitalmente da PipetteCal Suite. Protocollo ISO 8655.", 14, 285);
+  doc.setFontSize(7); doc.setTextColor(150); doc.text("2S - Strumentazione & Servizi. Protocollo ISO 8655.", 14, 285);
   if (returnBlob) return doc.output('bloburl');
   doc.save(`cert_${data.serialNumber || 'instrument'}.pdf`);
 };
@@ -172,9 +161,6 @@ export const createCalibrationPDF = (data: CalibrationData, returnBlob = false):
 export const generatePDF = (data: CalibrationData) => createCalibrationPDF(data, false);
 export const getPDFPreviewURL = (data: CalibrationData) => createCalibrationPDF(data, true);
 
-/**
- * Generates a professional list of all instruments for a client
- */
 export const generateClientListPDF = (clientName: string, pipettes: StoredPipette[], uiTheme: UiTheme = 'violet') => {
   const doc = new jsPDF();
   const colors = getThemeColors(uiTheme);
@@ -186,7 +172,7 @@ export const generateClientListPDF = (clientName: string, pipettes: StoredPipett
   doc.text(`CLIENTE: ${clientName.toUpperCase()}`, 14, curY);
   doc.setFontSize(8);
   doc.setTextColor(...colors.textLight);
-  doc.text(`Data estrazione: ${new Date().toLocaleDateString('it-IT')}`, 14, curY + 5);
+  doc.text(`Estratto il: ${new Date().toLocaleDateString('it-IT')}`, 14, curY + 6);
 
   const tableData = pipettes.map(p => [
     p.manufacturer || '-',
@@ -198,25 +184,13 @@ export const generateClientListPDF = (clientName: string, pipettes: StoredPipett
 
   autoTable(doc, {
     startY: curY + 12,
-    head: [['COSTRUTTORE', 'MODELLO', 'S/N', 'VOL. NOMINALE', 'ULTIMA TARATURA']],
+    head: [['COSTRUTTORE', 'MODELLO', 'MATRICOLA (S/N)', 'VOLUME', 'DATA TARATURA']],
     body: tableData,
     theme: 'grid',
-    headStyles: {
-      fillColor: colors.primary,
-      textColor: [255, 255, 255],
-      fontSize: 8,
-      fontStyle: 'bold',
-      halign: 'center'
-    },
-    styles: {
-      fontSize: 8,
-      cellPadding: 3
-    },
-    columnStyles: {
-      2: { fontStyle: 'bold' },
-      4: { halign: 'center' }
-    }
+    headStyles: { fillColor: colors.primary, textColor: [255, 255, 255], fontSize: 8, fontStyle: 'bold' },
+    styles: { fontSize: 8, cellPadding: 4 },
+    columnStyles: { 2: { fontStyle: 'bold' } }
   });
 
-  doc.save(`elenco_strumenti_${clientName.replace(/\s+/g, '_').toLowerCase()}.pdf`);
+  doc.save(`elenco_${clientName.replace(/\s/g, '_').toLowerCase()}.pdf`);
 };

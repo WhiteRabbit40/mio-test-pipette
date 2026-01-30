@@ -3,7 +3,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { supabase, isSupabaseConfigured } from './supabaseClient';
 import { Auth } from './components/Auth';
 import { Session } from '@supabase/supabase-js';
-import { Beaker, Wind, Save, Settings, FileText, Gauge, Info, CheckCircle2, AlertCircle, X, Database, LogOut, Loader2, ShieldAlert, Eye, EyeOff, Download, Layers, Calendar, Thermometer, Activity, User, Plus, Upload, FileSpreadsheet, Trash2, Search, Filter, CloudRain, MapPin, Settings2, ShieldCheck, Palette, Sparkles, ChevronRight, History, Trash, Printer } from 'lucide-react';
+import { Beaker, Wind, Save, Settings, FileText, Gauge, Info, CheckCircle2, AlertCircle, X, Database, LogOut, Loader2, ShieldAlert, Eye, EyeOff, Download, Layers, Calendar, Thermometer, Activity, User, Plus, Upload, FileSpreadsheet, Trash2, Search, Filter, CloudRain, MapPin, Settings2, ShieldCheck, Palette, Sparkles, ChevronRight, History, Trash, Printer, Ruler } from 'lucide-react';
 import { CalibrationData, PipetteType, Client, StoredPipette, UiTheme } from './types';
 import { INITIAL_MEASUREMENTS_FIXED, INITIAL_MEASUREMENTS_VAR, DEFAULT_Z_FACTOR, calculateZFactor, ISO_TOLERANCES_DATA, PIPETTE_PRESETS } from './constants';
 import { InputGroup } from './components/InputGroup';
@@ -47,7 +47,6 @@ const App: React.FC = () => {
   const [uiTheme, setUiTheme] = useState<UiTheme>('violet');
   const [showThemePicker, setShowThemePicker] = useState(false);
   
-  // STATI ARCHIVIO
   const [showDbModal, setShowDbModal] = useState(false);
   const [clients, setClients] = useState<Client[]>([]);
   const [storedPipettes, setStoredPipettes] = useState<StoredPipette[]>([]);
@@ -90,7 +89,23 @@ const App: React.FC = () => {
     }
   }, [data.temperature, data.pressure]);
 
-  // LOGICA DATABASE
+  const applyIsoTolerances = () => {
+    const vol = parseFloat(data.nominalVolume);
+    if (isNaN(vol)) {
+      setNotification({ message: "Inserisci prima il volume nominale", type: 'error', visible: true });
+      return;
+    }
+    const volUl = data.nominalVolumeUnit === 'ml' ? vol * 1000 : vol;
+    const match = ISO_TOLERANCES_DATA.find(t => t.vol === volUl);
+    
+    if (match) {
+      setData(prev => ({ ...prev, toleranceSystematic: match.sys, toleranceRandom: match.rand }));
+      setNotification({ message: `Limiti ISO 8655 applicati per ${volUl} µl`, type: 'success', visible: true });
+    } else {
+      setNotification({ message: "Volume non standard ISO 8655-2. Inserisci i limiti manualmente.", type: 'error', visible: true });
+    }
+  };
+
   const fetchClients = async () => {
     setDbLoading(true);
     const { data, error } = await supabase.from('clients').select('*').order('name');
@@ -194,11 +209,14 @@ const App: React.FC = () => {
     setShowPreview(!showPreview);
   };
 
-  if (!isSupabaseConfigured) return <div>Configura Supabase</div>;
+  if (!isSupabaseConfigured) return <div className="min-h-screen bg-slate-900 flex flex-col items-center justify-center p-6 text-center">
+    <ShieldAlert size={64} className="text-amber-500 mb-6" />
+    <h2 className="text-2xl font-bold mb-2">Configurazione Richiesta</h2>
+    <p className="text-slate-400 max-w-md">Per favore imposta le variabili d'ambiente <strong>VITE_SUPABASE_URL</strong> e <strong>VITE_SUPABASE_ANON_KEY</strong> nelle impostazioni di Vercel.</p>
+  </div>;
+
   if (authLoading) return <div className="min-h-screen bg-slate-900 flex items-center justify-center"><Loader2 className="animate-spin text-violet-500" /></div>;
   if (!session) return <Auth />;
-
-  const nominalUl = (parseFloat(data.nominalVolume) || 0) * (data.nominalVolumeUnit === 'ml' ? 1000 : 1);
 
   return (
     <div className={`min-h-screen ${activeTheme.rootBg} text-slate-100 flex flex-col h-screen overflow-hidden transition-colors duration-700`}>
@@ -214,7 +232,7 @@ const App: React.FC = () => {
           </div>
           <div>
             <h1 className="text-lg font-bold leading-none tracking-tight">PipetteCal</h1>
-            <span className="text-[10px] text-white/50 uppercase tracking-[0.2em] font-black">Lab Suite</span>
+            <span className="text-[10px] text-white/50 uppercase tracking-[0.2em] font-black">2S - Strumentazione</span>
           </div>
         </div>
         
@@ -243,24 +261,60 @@ const App: React.FC = () => {
         <div className={`overflow-y-auto p-4 md:p-8 transition-all duration-500 ease-in-out ${showPreview ? 'w-full md:w-1/2 border-r border-white/5' : 'w-full'}`}>
           <div className="max-w-[1400px] mx-auto grid grid-cols-1 md:grid-cols-12 gap-8 pb-32">
             
-            <aside className="md:col-span-4 lg:col-span-3 space-y-6">
+            <aside className="md:col-span-4 lg:col-span-4 space-y-6">
               <div className="flex items-center gap-3 px-1">
                 <div className={`p-2 ${activeTheme.bgLight} rounded-lg ${activeTheme.accent}`}><Info size={16}/></div>
                 <h2 className="text-[10px] font-black text-white/50 uppercase tracking-[0.2em]">Anagrafica Strumento</h2>
               </div>
-              <div className={`${activeTheme.cardBg} p-6 rounded-[32px] border ${activeTheme.border} space-y-6 shadow-xl backdrop-blur-md transition-all duration-500`}>
+              
+              <div className={`${activeTheme.cardBg} p-6 rounded-[32px] border ${activeTheme.border} space-y-5 shadow-xl backdrop-blur-md transition-all duration-500`}>
                 <div className="bg-black/20 p-1 rounded-xl border border-white/10 grid grid-cols-2 gap-1">
                   <button onClick={() => setData({...data, type: PipetteType.FIXED})} className={`py-2 rounded-lg text-[10px] font-black uppercase transition-all ${data.type === PipetteType.FIXED ? `${activeTheme.bg} text-white shadow-lg` : 'text-white/30'}`}>Fissa</button>
                   <button onClick={() => setData({...data, type: PipetteType.VARIABLE})} className={`py-2 rounded-lg text-[10px] font-black uppercase transition-all ${data.type === PipetteType.VARIABLE ? `${activeTheme.bg} text-white shadow-lg` : 'text-white/30'}`}>Variabile</button>
                 </div>
+                
                 <CustomDatePicker label="Data Taratura" value={data.testDate} onChange={(val) => setData({...data, testDate: val})} />
-                <InputGroup label="Costruttore" value={data.manufacturer} onChange={(e) => setData({...data, manufacturer: e.target.value})} theme={uiTheme} />
-                <InputGroup label="Modello" value={data.model} onChange={(e) => setData({...data, model: e.target.value})} theme={uiTheme} />
+                
+                <div className="grid grid-cols-2 gap-4">
+                  <InputGroup label="Costruttore" value={data.manufacturer} onChange={(e) => setData({...data, manufacturer: e.target.value})} theme={uiTheme} />
+                  <InputGroup label="Modello" value={data.model} onChange={(e) => setData({...data, model: e.target.value})} theme={uiTheme} />
+                </div>
+                
                 <InputGroup label="Matricola (S/N)" value={data.serialNumber} onChange={(e) => setData({...data, serialNumber: e.target.value})} theme={uiTheme} />
+
+                <div className="pt-4 border-t border-white/10">
+                   <div className="flex items-center gap-3 px-1 mb-4">
+                    <div className={`p-2 ${activeTheme.bgLight} rounded-lg ${activeTheme.accent}`}><Ruler size={14}/></div>
+                    <h2 className="text-[10px] font-black text-white/50 uppercase tracking-[0.2em]">Specifiche Tecniche</h2>
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-3 items-end">
+                    <InputGroup label="Vol. Nominale" value={data.nominalVolume} onChange={(e) => setData({...data, nominalVolume: e.target.value})} type="number" theme={uiTheme} />
+                    <div className="flex flex-col">
+                      <label className="text-[10px] font-black text-white/30 uppercase tracking-[0.1em] mb-2 ml-1">Unità</label>
+                      <div className="bg-black/20 p-1 rounded-xl border border-white/10 grid grid-cols-2 gap-1 h-[46px]">
+                        <button onClick={() => setData({...data, nominalVolumeUnit: 'ul'})} className={`py-1 rounded-lg text-[10px] font-black uppercase transition-all ${data.nominalVolumeUnit === 'ul' ? `${activeTheme.bg} text-white` : 'text-white/30'}`}>µl</button>
+                        <button onClick={() => setData({...data, nominalVolumeUnit: 'ml'})} className={`py-1 rounded-lg text-[10px] font-black uppercase transition-all ${data.nominalVolumeUnit === 'ml' ? `${activeTheme.bg} text-white` : 'text-white/30'}`}>ml</button>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-3 mt-4">
+                    <InputGroup label="Tol. Sist. (µl)" value={data.toleranceSystematic} onChange={(e) => setData({...data, toleranceSystematic: e.target.value === '' ? '' : parseFloat(e.target.value)})} type="number" theme={uiTheme} step="0.01" />
+                    <InputGroup label="Tol. Cas. (µl)" value={data.toleranceRandom} onChange={(e) => setData({...data, toleranceRandom: e.target.value === '' ? '' : parseFloat(e.target.value)})} type="number" theme={uiTheme} step="0.01" />
+                  </div>
+
+                  <button 
+                    onClick={applyIsoTolerances}
+                    className={`w-full mt-4 py-3 rounded-2xl text-[10px] font-black uppercase tracking-widest border border-white/10 hover:bg-white/5 transition-all flex items-center justify-center gap-2 ${activeTheme.accent}`}
+                  >
+                    <ShieldCheck size={14}/> Applica Limiti ISO 8655
+                  </button>
+                </div>
               </div>
             </aside>
 
-            <div className="md:col-span-8 lg:col-span-9 space-y-8">
+            <div className="md:col-span-8 lg:col-span-8 space-y-8">
               <section className={`${activeTheme.cardBg} p-7 rounded-[32px] border ${activeTheme.border} space-y-6 shadow-xl backdrop-blur-md transition-all duration-500`}>
                 <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
                   <div className="space-y-1">
@@ -270,7 +324,7 @@ const App: React.FC = () => {
                   <div className="flex items-center gap-2 bg-black/30 p-2 rounded-2xl border border-white/5">
                     <div className="relative">
                       <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-white/30" size={14} />
-                      <input type="text" placeholder="Località (es. Cagliari...)" value={locationSearch} onChange={(e) => setLocationSearch(e.target.value)} className="bg-transparent text-xs text-white pl-9 pr-3 py-1.5 outline-none w-40 md:w-64" />
+                      <input type="text" placeholder="Località..." value={locationSearch} onChange={(e) => setLocationSearch(e.target.value)} className="bg-transparent text-xs text-white pl-9 pr-3 py-1.5 outline-none w-40 md:w-64" />
                     </div>
                     <button onClick={fetchWeather} disabled={weatherLoading} className={`px-4 py-1.5 ${activeTheme.bg} text-white hover:opacity-90 rounded-xl text-[10px] font-black uppercase tracking-wider flex items-center gap-2 transition-all`}>
                       {weatherLoading ? <Loader2 className="animate-spin" size={12}/> : <Sparkles size={12}/>} Rileva
@@ -323,14 +377,13 @@ const App: React.FC = () => {
         )}
       </main>
       
-      {/* MODALE ARCHIVIO RIPRISTINATO */}
       {showDbModal && (
         <div className="fixed inset-0 bg-black/80 backdrop-blur-md z-[200] flex items-center justify-center p-4 animate-in fade-in duration-300">
           <div className={`w-full max-w-4xl ${activeTheme.rootBg} border ${activeTheme.border} rounded-[40px] shadow-2xl overflow-hidden flex flex-col h-[80vh]`}>
             <div className="p-8 border-b border-white/5 flex justify-between items-center bg-white/5">
               <div>
                 <h3 className="text-2xl font-bold text-white flex items-center gap-3"><Database className={activeTheme.accent}/> Archivio Tarature</h3>
-                <p className="text-[10px] text-white/40 font-black uppercase tracking-widest mt-1">Sincronizzato con account: {session.user.email}</p>
+                <p className="text-[10px] text-white/40 font-black uppercase tracking-widest mt-1">Account: {session.user.email}</p>
               </div>
               <button onClick={() => { setShowDbModal(false); setSelectedClientId(null); setStoredPipettes([]); }} className="p-3 hover:bg-white/5 rounded-full text-white/50 hover:text-white transition-all">
                 <X size={24} />
@@ -338,7 +391,6 @@ const App: React.FC = () => {
             </div>
             
             <div className="flex-1 flex overflow-hidden">
-              {/* LISTA CLIENTI */}
               <div className="w-1/3 border-r border-white/5 overflow-y-auto p-4 space-y-2 bg-black/20">
                 <div className="relative mb-4">
                   <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-white/20" size={14} />
@@ -353,12 +405,11 @@ const App: React.FC = () => {
                 ))}
               </div>
 
-              {/* LISTA PIPETTE */}
               <div className="flex-1 overflow-y-auto p-6">
                 {!selectedClientId ? (
                   <div className="h-full flex flex-col items-center justify-center text-center space-y-4 opacity-30">
                     <User size={48} />
-                    <p className="text-sm font-bold uppercase tracking-widest">Seleziona un cliente per vedere lo storico</p>
+                    <p className="text-sm font-bold uppercase tracking-widest">Seleziona un cliente</p>
                   </div>
                 ) : dbLoading ? (
                   <div className="h-full flex items-center justify-center"><Loader2 className={`animate-spin ${activeTheme.accent}`} size={32} /></div>
@@ -376,7 +427,7 @@ const App: React.FC = () => {
                     {storedPipettes.length === 0 ? (
                       <div className="flex-1 flex flex-col items-center justify-center text-center space-y-4 opacity-30">
                         <History size={48} />
-                        <p className="text-sm font-bold uppercase tracking-widest">Nessuna taratura trovata per questo cliente</p>
+                        <p className="text-sm font-bold uppercase tracking-widest">Nessuna taratura trovata</p>
                       </div>
                     ) : (
                       <div className="grid grid-cols-1 gap-4">
