@@ -49,7 +49,7 @@ const App: React.FC = () => {
   
   const [showDbModal, setShowDbModal] = useState(false);
   const [showLabelModal, setShowLabelModal] = useState(false);
-  const [labelCount, setLabelCount] = useState(12);
+  const [labelCount, setLabelCount] = useState(15);
 
   const [clients, setClients] = useState<Client[]>([]);
   const [storedPipettes, setStoredPipettes] = useState<StoredPipette[]>([]);
@@ -148,7 +148,6 @@ const App: React.FC = () => {
     setShowLabelModal(false);
   };
 
-  // Fixed: Added missing handlePrintClientList function
   const handlePrintClientList = () => {
     if (!selectedClientId) return;
     const client = clients.find(c => c.id === selectedClientId);
@@ -397,9 +396,9 @@ const App: React.FC = () => {
                 <h3 className="text-xl font-bold flex items-center gap-3"><Tag className="text-amber-500"/> Stampa Etichette</h3>
                 <button onClick={() => setShowLabelModal(false)} className="text-white/30 hover:text-white"><X size={24}/></button>
               </div>
-              <p className="text-sm text-white/50">Quante etichette vuoi stampare per questo strumento?</p>
+              <p className="text-sm text-white/50">Quante etichette vuoi stampare? (Layout compatto 3x15 per foglio A4)</p>
               <div className="grid grid-cols-4 gap-2">
-                {[6, 12, 18, 24].map(n => (
+                {[15, 30, 45, 90].map(n => (
                   <button key={n} onClick={() => setLabelCount(n)} className={`py-3 rounded-2xl font-black text-xs transition-all ${labelCount === n ? 'bg-amber-500 text-white' : 'bg-white/5 text-white/40 hover:bg-white/10'}`}>{n}</button>
                 ))}
               </div>
