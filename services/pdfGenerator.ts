@@ -59,55 +59,92 @@ const drawPdfChart = (doc: jsPDF, x: number, y: number, w: number, h: number, st
   const volumes = stats.volumes;
   if (volumes.length === 0) return;
 
+  // Sfondo tecnico
   doc.setFillColor(255, 255, 255);
   doc.setDrawColor(200, 200, 200);
   doc.setLineWidth(0.1);
   doc.rect(x, y, w, h, 'FD');
 
-  const padding = 12;
-  const chartW = w - padding * 2;
-  const chartH = h - padding * 2;
-  const startX = x + padding;
-  const startY = y + padding;
+  const paddingL = 20;
+  const paddingR = 10;
+  const paddingT = 15;
+  const paddingB = 15;
+  const chartW = w - (paddingL + paddingR);
+  const chartH = h - (paddingT + paddingB);
+  const startX = x + paddingL;
+  const startY = y + paddingT;
 
   const sysTol = Number(tol) || target * 0.05;
-  const minVal = Math.min(...volumes, target - sysTol) - (sysTol * 0.5);
-  const maxVal = Math.max(...volumes, target + sysTol) + (sysTol * 0.5);
+  const upperTol = target + sysTol;
+  const lowerTol = target - sysTol;
+  
+  // Scala centrata
+  const allPoints = [...volumes, upperTol, lowerTol];
+  let minVal = Math.min(...allPoints);
+  let maxVal = Math.max(...allPoints);
+  const span = maxVal - minVal || target * 0.01;
+  minVal -= span * 0.2;
+  maxVal += span * 0.2;
   const range = maxVal - minVal;
 
   const getX = (i: number) => startX + (i * chartW / 9);
   const getY = (v: number) => startY + chartH - ((v - minVal) / range * chartH);
 
-  // Grid
-  doc.setDrawColor(240, 240, 240);
-  [target - sysTol, target, target + sysTol].forEach(v => {
+  // Grid Millimetrata
+  doc.setDrawColor(245, 245, 245);
+  doc.setLineWidth(0.05);
+  for (let i = 0; i <= 10; i++) {
+    const v = minVal + (i * range / 10);
     doc.line(startX, getY(v), startX + chartW, getY(v));
-    // Fixed: Explicitly convert result of toFixed to string to satisfy jsPDF types
-    doc.setFontSize(5); doc.setTextColor(150, 150, 150); doc.text(v.toFixed(2).toString(), startX - 2, getY(v) + 1, { align: 'right' });
-  });
+    doc.setFontSize(5); doc.setTextColor(150);
+    doc.text(v.toFixed(2).toString(), startX - 2, getY(v) + 1, { align: 'right' });
+  }
 
-  // Limits
-  doc.setDrawColor(220, 38, 38); doc.setLineWidth(0.2); doc.setLineDashPattern([1, 1], 0);
-  doc.line(startX, getY(target + sysTol), startX + chartW, getY(target + sysTol));
-  doc.line(startX, getY(target - sysTol), startX + chartW, getY(target - sysTol));
+  // --- AREA INCERTEZZA (±2SD) ---
+  const upper2sd = stats.meanVolume + (2 * stats.sd);
+  const lower2sd = stats.meanVolume - (2 * stats.sd);
+  doc.setFillColor(...colors.accent);
+  doc.setGState(new (doc as any).GState({ opacity: 0.15 }));
+  doc.rect(startX, getY(upper2sd), chartW, getY(lower2sd) - getY(upper2sd), 'F');
+  doc.setGState(new (doc as any).GState({ opacity: 1 }));
+
+  // --- LIMITI ISO (ROSSI) ---
+  doc.setDrawColor(...colors.fail); doc.setLineWidth(0.4); doc.setLineDashPattern([1.5, 1], 0);
+  doc.line(startX, getY(upperTol), startX + chartW, getY(upperTol));
+  doc.line(startX, getY(lowerTol), startX + chartW, getY(lowerTol));
   
-  // Nominal
-  doc.setDrawColor(...colors.primary); doc.setLineWidth(0.3); doc.setLineDashPattern([2, 2], 0);
+  // --- NOMINALE ---
+  doc.setDrawColor(...colors.primary); doc.setLineWidth(0.3); doc.setLineDashPattern([3, 2], 0);
   doc.line(startX, getY(target), startX + chartW, getY(target));
   doc.setLineDashPattern([], 0);
 
-  // Data
-  doc.setDrawColor(...colors.accent); doc.setLineWidth(0.6);
+  // --- DATI ---
+  doc.setDrawColor(...colors.primary); doc.setLineWidth(0.8);
   for (let i = 0; i < volumes.length - 1; i++) {
     doc.line(getX(i), getY(volumes[i]), getX(i + 1), getY(volumes[i + 1]));
   }
-  doc.setFillColor(...colors.accent);
-  volumes.forEach((v, i) => doc.circle(getX(i), getY(v), 0.7, 'F'));
+  volumes.forEach((v, i) => {
+    doc.setFillColor(...colors.primary); doc.circle(getX(i), getY(v), 0.8, 'F');
+    doc.setFillColor(255, 255, 255); doc.circle(getX(i), getY(v), 0.3, 'F');
+  });
+
+  // Legenda Tecnica
+  doc.setFont('helvetica', 'bold'); doc.setFontSize(6); doc.setTextColor(...colors.textDark);
+  doc.text("ANALISI GRAVIMETRICA (µl)", startX, startY - 5);
+  
+  const legX = startX + chartW - 55;
+  const legY = startY - 5;
+  doc.setDrawColor(...colors.fail); doc.setLineWidth(0.4); doc.setLineDashPattern([1, 1], 0); doc.line(legX, legY, legX+4, legY);
+  doc.setFontSize(5); doc.text("ISO LIMITS", legX+5, legY+0.5);
+  
+  doc.setFillColor(...colors.accent); doc.setGState(new (doc as any).GState({ opacity: 0.2 })); doc.rect(legX+20, legY-1.5, 4, 3, 'F');
+  doc.setGState(new (doc as any).GState({ opacity: 1 }));
+  doc.text("± 2SD (UNC.)", legX+25, legY+0.5);
 };
 
 const drawStatsDashboard = (doc: jsPDF, curY: number, stats: CalculatedStats, targetVol: number, tolSys: number | '', tolRand: number | '', colors: ThemeColors, title: string) => {
-  doc.setFont('helvetica', 'bold'); doc.setFontSize(9); doc.setTextColor(...colors.primary); doc.text(title.toUpperCase(), 14, curY);
-  const startY = curY + 4, cardW = 35, cardH = 32, gap = 2;
+  doc.setFont('helvetica', 'bold'); doc.setFontSize(10); doc.setTextColor(...colors.primary); doc.text(title.toUpperCase(), 14, curY);
+  const startY = curY + 4, cardW = 35, cardH = 30, gap = 2;
   
   const drawCard = (x: number, label: string, val: string, unit: string, tol?: number, cur?: number) => {
     doc.setFillColor(252, 252, 252); doc.setDrawColor(230, 230, 230); doc.roundedRect(x, startY, cardW, cardH, 2, 2, 'FD');
@@ -115,51 +152,73 @@ const drawStatsDashboard = (doc: jsPDF, curY: number, stats: CalculatedStats, ta
     doc.setFontSize(10); doc.setTextColor(40, 40, 40); doc.text(String(val), x + 3, startY + 18);
     doc.setFontSize(6); doc.text(String(unit), x + 3 + doc.getTextWidth(String(val)) + 1, startY + 18);
     if (tol && cur !== undefined) {
-      doc.setFillColor(240, 240, 240); doc.rect(x + 3, startY + 25, cardW - 6, 1.5, 'F');
+      doc.setFillColor(240, 240, 240); doc.rect(x + 3, startY + 24, cardW - 6, 1.5, 'F');
       const usage = Math.min(100, (Math.abs(cur)/tol)*100);
       doc.setFillColor(...(usage > 100 ? colors.fail : colors.success));
-      doc.rect(x + 3, startY + 25, (usage/100)*(cardW-6), 1.5, 'F');
+      doc.rect(x + 3, startY + 24, (usage/100)*(cardW-6), 1.5, 'F');
     }
   };
 
-  drawCard(14, "Media", fmt(stats.meanVolume, 3), "µl");
-  drawCard(14 + (cardW+gap), "Err. Sist.", fmt(stats.inaccuracy, 3), "µl", Number(tolSys), stats.inaccuracy);
-  drawCard(14 + (cardW+gap)*2, "Err. Rel.", fmt(targetVol > 0 ? (stats.inaccuracy/targetVol)*100 : 0, 2), "%");
-  drawCard(14 + (cardW+gap)*3, "SD", fmt(stats.sd, 4), "µl", Number(tolRand), stats.sd);
-  drawCard(14 + (cardW+gap)*4, "Incertezza", fmt(stats.uncertainty, 3), "µl");
+  drawCard(14, "Vol. Medio", fmt(stats.meanVolume, 3), "µl");
+  drawCard(14 + (cardW+gap), "Err. Sist. (E)", fmt(stats.inaccuracy, 3), "µl", Number(tolSys), stats.inaccuracy);
+  drawCard(14 + (cardW+gap)*2, "Err. Rel. (E%)", fmt(targetVol > 0 ? (stats.inaccuracy/targetVol)*100 : 0, 2), "%");
+  drawCard(14 + (cardW+gap)*3, "Ripetib. (SD)", fmt(stats.sd, 4), "µl", Number(tolRand), stats.sd);
+  drawCard(14 + (cardW+gap)*4, "Incert. (k=2)", fmt(stats.uncertainty, 3), "µl");
 
-  drawPdfChart(doc, 14, startY + cardH + 4, 183, 30, stats, targetVol, tolSys, colors);
-  return startY + cardH + 44;
+  drawPdfChart(doc, 14, startY + cardH + 4, 183, 55, stats, targetVol, tolSys, colors);
+  return startY + cardH + 68;
 };
 
-export const generatePipetteLabelPDF = (pipette: StoredPipette) => {
-  const doc = new jsPDF({ orientation: 'landscape', unit: 'mm', format: [50, 30] });
-  const theme = getThemeColors(pipette.full_data.uiTheme);
+export const generateLabelsSheetPDF = (count: number, date: string, frequencyMonths: number, themeKey: UiTheme = 'violet') => {
+  const doc = new jsPDF();
+  const colors = getThemeColors(themeKey);
+  const labelW = 60;
+  const labelH = 35;
+  const marginX = 15;
+  const marginY = 20;
+  const labelsPerRow = 3;
   
-  // Header / Logo
-  doc.setFillColor(...theme.primary); doc.roundedRect(2, 2, 6, 6, 1, 1, 'F');
-  doc.setTextColor(255, 255, 255); doc.setFontSize(5); doc.setFont('helvetica', 'bold'); doc.text('2S', 5, 6, { align: 'center' });
-  doc.setTextColor(0, 0, 0); doc.setFontSize(6); doc.text('CERTIFICATO TARATURA', 10, 6);
-  
-  doc.setDrawColor(220, 220, 220); doc.setLineWidth(0.1); doc.line(2, 9, 48, 9);
-  
-  // Info
-  doc.setFontSize(5); doc.setTextColor(120, 120, 120); doc.text('S/N MATRICOLA:', 2, 13);
-  doc.setFontSize(8); doc.setTextColor(0, 0, 0); doc.text(pipette.serial_number.toUpperCase(), 2, 17);
-  
-  doc.setFontSize(5); doc.setTextColor(120, 120, 120); doc.text('VOLUME:', 30, 13);
-  doc.setFontSize(7); doc.setTextColor(0, 0, 0); doc.text(pipette.nominal_volume, 30, 17);
+  const calDate = new Date(date);
+  const nextDate = new Date(date);
+  nextDate.setMonth(nextDate.getMonth() + frequencyMonths);
 
-  doc.setFontSize(5); doc.setTextColor(120, 120, 120); doc.text('DATA TARATURA:', 2, 22);
-  doc.setFontSize(6); doc.setTextColor(0, 0, 0); doc.text(new Date(pipette.last_calibrated).toLocaleDateString('it-IT'), 2, 26);
+  for (let i = 0; i < count; i++) {
+    const row = Math.floor((i % 24) / labelsPerRow);
+    const col = i % labelsPerRow;
+    
+    // Se finiamo la pagina (max 24 per pagina)
+    if (i > 0 && i % 24 === 0) {
+      doc.addPage();
+    }
 
-  const nextCal = new Date(pipette.last_calibrated);
-  nextCal.setMonth(nextCal.getMonth() + (pipette.full_data.calibrationFrequencyMonths || 12));
-  
-  doc.setFontSize(5); doc.setTextColor(120, 120, 120); doc.text('PROSSIMA SCADENZA:', 30, 22);
-  doc.setFontSize(7); doc.setTextColor(...theme.primary); doc.text(nextCal.toLocaleDateString('it-IT'), 30, 26);
-  
-  doc.save(`label_${pipette.serial_number}.pdf`);
+    const x = marginX + (col * labelW);
+    const y = marginY + (row * labelH);
+
+    // Linee di taglio (tratteggiate grigie)
+    doc.setDrawColor(200, 200, 200); doc.setLineWidth(0.1); doc.setLineDashPattern([1, 1], 0);
+    doc.rect(x, y, labelW, labelH, 'S');
+    doc.setLineDashPattern([], 0);
+
+    // Contenuto Etichetta
+    // Logo 2S piccolo
+    doc.setFillColor(...colors.primary); doc.roundedRect(x + 3, y + 3, 5, 5, 1, 1, 'F');
+    doc.setTextColor(255); doc.setFontSize(4); doc.setFont('helvetica', 'bold'); doc.text('2S', x + 5.5, y + 6.5, { align: 'center' });
+    
+    doc.setTextColor(...colors.textDark); doc.setFontSize(6); doc.text('STRUMENTAZIONE & SERVIZI', x + 10, y + 6.5);
+    doc.setDrawColor(230); doc.setLineWidth(0.1); doc.line(x + 3, y + 10, x + labelW - 3, y + 10);
+
+    doc.setTextColor(150); doc.setFontSize(5); doc.text('DATA TARATURA:', x + 5, y + 15);
+    doc.setTextColor(0); doc.setFontSize(10); doc.setFont('helvetica', 'bold'); doc.text(calDate.toLocaleDateString('it-IT'), x + 5, y + 21);
+
+    doc.setTextColor(150); doc.setFontSize(5); doc.text('PROSSIMA SCADENZA:', x + 5, y + 27);
+    doc.setTextColor(...colors.primary); doc.setFontSize(10); doc.text(nextDate.toLocaleDateString('it-IT'), x + 5, y + 32);
+
+    // Stato
+    doc.setFillColor(...colors.success); doc.roundedRect(x + labelW - 12, y + 15, 9, 15, 1, 1, 'F');
+    doc.setTextColor(255); doc.setFontSize(4); doc.text('OK', x + labelW - 7.5, y + 23, { align: 'center' });
+  }
+
+  doc.save(`etichette_2S_${count}.pdf`);
 };
 
 export const createCalibrationPDF = (data: CalibrationData, returnBlob = false): any => {
@@ -180,23 +239,22 @@ export const createCalibrationPDF = (data: CalibrationData, returnBlob = false):
     });
   };
 
-  // Fixed: Explicitly convert potential non-string values to strings for drawRow fields
   drawRow(curY, [{l: 'Costruttore', v: String(data.manufacturer)}, {l: 'Modello', v: String(data.model)}, {l: 'S/N', v: String(data.serialNumber)}, {l: 'Vol. Nominale', v: `${data.nominalVolume} ${data.nominalVolumeUnit}`}]);
   curY += 12;
   drawRow(curY, [{l: 'Data Test', v: String(data.testDate)}, {l: 'Temp (°C)', v: String(data.temperature)}, {l: 'Pres (hPa)', v: String(data.pressure)}, {l: 'Fattore Z', v: fmt(z, 5)}]);
   curY += 20;
 
   if (data.type === PipetteType.FIXED) {
-    curY = drawStatsDashboard(doc, curY, calculateStats(data.measurementsFixed, z, nomVol), nomVol, data.toleranceSystematic, data.toleranceRandom, theme, "Risultati");
+    curY = drawStatsDashboard(doc, curY, calculateStats(data.measurementsFixed, z, nomVol), nomVol, data.toleranceSystematic, data.toleranceRandom, theme, "Risultati Taratura");
   } else {
-    curY = drawStatsDashboard(doc, curY, calculateStats(data.measurementsVarMin, z, nomVol*0.1), nomVol*0.1, data.toleranceSystematic, data.toleranceRandom, theme, "Volume 10%");
-    if (curY > 240) { doc.addPage(); curY = 25; }
-    curY = drawStatsDashboard(doc, curY, calculateStats(data.measurementsVarMid, z, nomVol*0.5), nomVol*0.5, data.toleranceSystematic, data.toleranceRandom, theme, "Volume 50%");
-    if (curY > 240) { doc.addPage(); curY = 25; }
-    curY = drawStatsDashboard(doc, curY, calculateStats(data.measurementsVarMax, z, nomVol), nomVol, data.toleranceSystematic, data.toleranceRandom, theme, "Volume 100%");
+    curY = drawStatsDashboard(doc, curY, calculateStats(data.measurementsVarMin, z, nomVol*0.1), nomVol*0.1, data.toleranceSystematic, data.toleranceRandom, theme, "Punto 1: Volume Minimo (10%)");
+    if (curY > 180) { doc.addPage(); curY = 25; }
+    curY = drawStatsDashboard(doc, curY, calculateStats(data.measurementsVarMid, z, nomVol*0.5), nomVol*0.5, data.toleranceSystematic, data.toleranceRandom, theme, "Punto 2: Volume Medio (50%)");
+    if (curY > 180) { doc.addPage(); curY = 25; }
+    curY = drawStatsDashboard(doc, curY, calculateStats(data.measurementsVarMax, z, nomVol), nomVol, data.toleranceSystematic, data.toleranceRandom, theme, "Punto 3: Volume Massimo (100%)");
   }
 
-  doc.setFontSize(7); doc.setTextColor(150, 150, 150); doc.text("Generato da PipetteCal 2S - Conformità ISO 8655-6", 14, 285);
+  doc.setFontSize(7); doc.setTextColor(150, 150, 150); doc.text("Generato da PipetteCal 2S - Conformità ISO 8655-6. Il presente certificato ha validità legale solo se firmato.", 14, 285);
   return returnBlob ? doc.output('bloburl') : doc.save(`cert_${data.serialNumber}.pdf`);
 };
 

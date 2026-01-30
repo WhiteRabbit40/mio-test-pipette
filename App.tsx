@@ -2,15 +2,14 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { supabase, isSupabaseConfigured } from './supabaseClient';
 import { Auth } from './components/Auth';
-// Fixed: Use 'type' for Session import to satisfy strict TypeScript environments
 import type { Session } from '@supabase/supabase-js';
-import { Beaker, Wind, Save, Settings, FileText, Gauge, Info, CheckCircle2, AlertCircle, X, Database, LogOut, Loader2, ShieldAlert, Eye, EyeOff, Download, Layers, Calendar, Thermometer, Activity, User, Plus, Upload, FileSpreadsheet, Trash2, Search, Filter, CloudRain, MapPin, Settings2, ShieldCheck, Palette, Sparkles, ChevronRight, History, Trash, Printer, Ruler, Tag } from 'lucide-react';
+import { Beaker, Wind, Save, Settings, FileText, Gauge, Info, CheckCircle2, AlertCircle, X, Database, LogOut, Loader2, ShieldAlert, Eye, EyeOff, Download, Layers, Calendar, Thermometer, Activity, User, Plus, Upload, FileSpreadsheet, Trash2, Search, Filter, CloudRain, MapPin, Settings2, ShieldCheck, Palette, Sparkles, ChevronRight, History, Trash, Printer, Ruler, Tag, FileDown } from 'lucide-react';
 import { CalibrationData, PipetteType, Client, StoredPipette, UiTheme } from './types';
 import { INITIAL_MEASUREMENTS_FIXED, INITIAL_MEASUREMENTS_VAR, DEFAULT_Z_FACTOR, calculateZFactor, ISO_TOLERANCES_DATA, PIPETTE_PRESETS } from './constants';
 import { InputGroup } from './components/InputGroup';
 import { MeasurementSection } from './components/MeasurementSection';
 import { LiveChart } from './components/LiveChart';
-import { generatePDF, getPDFPreviewURL, generateClientListPDF, generatePipetteLabelPDF } from './services/pdfGenerator';
+import { generatePDF, getPDFPreviewURL, generateClientListPDF, generateLabelsSheetPDF } from './services/pdfGenerator';
 import { CustomDatePicker } from './components/CustomDatePicker';
 
 const THEME_CONFIG = {
@@ -49,6 +48,9 @@ const App: React.FC = () => {
   const [showThemePicker, setShowThemePicker] = useState(false);
   
   const [showDbModal, setShowDbModal] = useState(false);
+  const [showLabelModal, setShowLabelModal] = useState(false);
+  const [labelCount, setLabelCount] = useState(12);
+
   const [clients, setClients] = useState<Client[]>([]);
   const [storedPipettes, setStoredPipettes] = useState<StoredPipette[]>([]);
   const [selectedClientId, setSelectedClientId] = useState<string | null>(null);
@@ -71,7 +73,6 @@ const App: React.FC = () => {
   const activeTheme = THEME_CONFIG[uiTheme];
 
   useEffect(() => {
-    // Fixed: Cast to any to bypass type resolution errors with Supabase AuthClient methods
     (supabase.auth as any).getSession().then(({ data: { session } }: any) => { setSession(session); setAuthLoading(false); });
     const { data: { subscription } } = (supabase.auth as any).onAuthStateChange((_event: any, session: any) => { setSession(session); setAuthLoading(false); });
     return () => subscription.unsubscribe();
@@ -142,9 +143,16 @@ const App: React.FC = () => {
     }
   };
 
+  const handlePrintLabels = () => {
+    generateLabelsSheetPDF(labelCount, data.testDate, data.calibrationFrequencyMonths, uiTheme);
+    setShowLabelModal(false);
+  };
+
+  // Fixed: Added missing handlePrintClientList function
   const handlePrintClientList = () => {
+    if (!selectedClientId) return;
     const client = clients.find(c => c.id === selectedClientId);
-    if (client && storedPipettes.length > 0) {
+    if (client) {
       generateClientListPDF(client.name, storedPipettes, uiTheme);
     }
   };
@@ -239,6 +247,9 @@ const App: React.FC = () => {
         </div>
         
         <div className="flex items-center gap-3">
+          <button onClick={() => setShowLabelModal(true)} className="px-4 py-2 bg-amber-500/10 hover:bg-amber-500/20 rounded-xl text-xs font-black uppercase tracking-widest flex items-center gap-2 transition-all border border-amber-500/20 text-amber-400">
+            <Tag size={14}/> Etichette
+          </button>
           <div className="relative">
             <button onClick={() => setShowThemePicker(!showThemePicker)} className="p-2 bg-white/10 hover:bg-white/20 rounded-xl transition-all border border-white/10 text-white">
               <Palette size={18} />
@@ -255,7 +266,6 @@ const App: React.FC = () => {
             )}
           </div>
           <button onClick={() => { fetchClients(); setShowDbModal(true); }} className="px-4 py-2 bg-white/10 hover:bg-white/20 rounded-xl text-xs font-black uppercase tracking-widest flex items-center gap-2 transition-all border border-white/10"><Database size={14}/> Archivio</button>
-          {/* Fixed: Cast auth to any for signOut method access */}
           <button onClick={() => (supabase.auth as any).signOut()} className="p-2 bg-red-500/10 text-red-400 hover:bg-red-500 hover:text-white rounded-xl transition-all border border-red-500/20"><LogOut size={16}/></button>
         </div>
       </header>
@@ -380,6 +390,28 @@ const App: React.FC = () => {
         )}
       </main>
       
+      {showLabelModal && (
+        <div className="fixed inset-0 bg-black/80 backdrop-blur-md z-[250] flex items-center justify-center p-4 animate-in fade-in duration-300">
+           <div className={`w-full max-w-sm ${activeTheme.rootBg} border ${activeTheme.border} rounded-[40px] shadow-2xl p-8 space-y-6`}>
+              <div className="flex justify-between items-center">
+                <h3 className="text-xl font-bold flex items-center gap-3"><Tag className="text-amber-500"/> Stampa Etichette</h3>
+                <button onClick={() => setShowLabelModal(false)} className="text-white/30 hover:text-white"><X size={24}/></button>
+              </div>
+              <p className="text-sm text-white/50">Quante etichette vuoi stampare per questo strumento?</p>
+              <div className="grid grid-cols-4 gap-2">
+                {[6, 12, 18, 24].map(n => (
+                  <button key={n} onClick={() => setLabelCount(n)} className={`py-3 rounded-2xl font-black text-xs transition-all ${labelCount === n ? 'bg-amber-500 text-white' : 'bg-white/5 text-white/40 hover:bg-white/10'}`}>{n}</button>
+                ))}
+              </div>
+              <div className="pt-4">
+                 <button onClick={handlePrintLabels} className="w-full py-4 bg-amber-500 hover:bg-amber-400 text-white font-black uppercase tracking-[0.2em] rounded-2xl shadow-lg shadow-amber-900/40 flex items-center justify-center gap-2 transition-all">
+                   <FileDown size={18}/> Scarica Foglio A4
+                 </button>
+              </div>
+           </div>
+        </div>
+      )}
+
       {showDbModal && (
         <div className="fixed inset-0 bg-black/80 backdrop-blur-md z-[200] flex items-center justify-center p-4 animate-in fade-in duration-300">
           <div className={`w-full max-w-4xl ${activeTheme.rootBg} border ${activeTheme.border} rounded-[40px] shadow-2xl overflow-hidden flex flex-col h-[80vh]`}>
@@ -447,7 +479,7 @@ const App: React.FC = () => {
                               </div>
                             </div>
                             <div className="flex items-center gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
-                              <button onClick={() => generatePipetteLabelPDF(pipette)} className="p-2 bg-amber-500/10 text-amber-500 hover:bg-amber-500 hover:text-white rounded-xl transition-all" title="Stampa Etichetta"><Tag size={14}/></button>
+                              <button onClick={() => { setData(pipette.full_data); setShowLabelModal(true); }} className="p-2 bg-amber-500/10 text-amber-500 hover:bg-amber-500 hover:text-white rounded-xl transition-all" title="Stampa Etichette"><Tag size={14}/></button>
                               <button onClick={() => loadPipette(pipette)} className={`p-2 ${activeTheme.bg} text-white rounded-xl shadow-lg`} title="Carica"><Upload size={14}/></button>
                               <button onClick={() => deletePipette(pipette.id)} className="p-2 bg-red-500/10 text-red-400 hover:bg-red-500 hover:text-white rounded-xl transition-all" title="Elimina"><Trash size={14}/></button>
                             </div>
