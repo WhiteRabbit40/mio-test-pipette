@@ -17,14 +17,16 @@ export const Auth = () => {
 
     try {
       if (isSignUp) {
-        const { error } = await supabase.auth.signUp({
+        // Fixed: Cast to any to bypass type resolution errors with Supabase AuthClient methods
+        const { error } = await (supabase.auth as any).signUp({
           email,
           password,
         });
         if (error) throw error;
         setMessage({ text: 'Registrazione completata! Controlla la tua email per confermare.', type: 'success' });
       } else {
-        const { error } = await supabase.auth.signInWithPassword({
+        // Fixed: Cast to any to bypass type resolution errors with Supabase AuthClient methods
+        const { error } = await (supabase.auth as any).signInWithPassword({
           email,
           password,
         });

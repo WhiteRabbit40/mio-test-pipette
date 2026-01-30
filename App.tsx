@@ -2,14 +2,15 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { supabase, isSupabaseConfigured } from './supabaseClient';
 import { Auth } from './components/Auth';
-import { Session } from '@supabase/supabase-js';
-import { Beaker, Wind, Save, Settings, FileText, Gauge, Info, CheckCircle2, AlertCircle, X, Database, LogOut, Loader2, ShieldAlert, Eye, EyeOff, Download, Layers, Calendar, Thermometer, Activity, User, Plus, Upload, FileSpreadsheet, Trash2, Search, Filter, CloudRain, MapPin, Settings2, ShieldCheck, Palette, Sparkles, ChevronRight, History, Trash, Printer, Ruler } from 'lucide-react';
+// Fixed: Use 'type' for Session import to satisfy strict TypeScript environments
+import type { Session } from '@supabase/supabase-js';
+import { Beaker, Wind, Save, Settings, FileText, Gauge, Info, CheckCircle2, AlertCircle, X, Database, LogOut, Loader2, ShieldAlert, Eye, EyeOff, Download, Layers, Calendar, Thermometer, Activity, User, Plus, Upload, FileSpreadsheet, Trash2, Search, Filter, CloudRain, MapPin, Settings2, ShieldCheck, Palette, Sparkles, ChevronRight, History, Trash, Printer, Ruler, Tag } from 'lucide-react';
 import { CalibrationData, PipetteType, Client, StoredPipette, UiTheme } from './types';
 import { INITIAL_MEASUREMENTS_FIXED, INITIAL_MEASUREMENTS_VAR, DEFAULT_Z_FACTOR, calculateZFactor, ISO_TOLERANCES_DATA, PIPETTE_PRESETS } from './constants';
 import { InputGroup } from './components/InputGroup';
 import { MeasurementSection } from './components/MeasurementSection';
 import { LiveChart } from './components/LiveChart';
-import { generatePDF, getPDFPreviewURL, generateClientListPDF } from './services/pdfGenerator';
+import { generatePDF, getPDFPreviewURL, generateClientListPDF, generatePipetteLabelPDF } from './services/pdfGenerator';
 import { CustomDatePicker } from './components/CustomDatePicker';
 
 const THEME_CONFIG = {
@@ -70,8 +71,9 @@ const App: React.FC = () => {
   const activeTheme = THEME_CONFIG[uiTheme];
 
   useEffect(() => {
-    supabase.auth.getSession().then(({ data: { session } }) => { setSession(session); setAuthLoading(false); });
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => { setSession(session); setAuthLoading(false); });
+    // Fixed: Cast to any to bypass type resolution errors with Supabase AuthClient methods
+    (supabase.auth as any).getSession().then(({ data: { session } }: any) => { setSession(session); setAuthLoading(false); });
+    const { data: { subscription } } = (supabase.auth as any).onAuthStateChange((_event: any, session: any) => { setSession(session); setAuthLoading(false); });
     return () => subscription.unsubscribe();
   }, []);
 
@@ -253,7 +255,8 @@ const App: React.FC = () => {
             )}
           </div>
           <button onClick={() => { fetchClients(); setShowDbModal(true); }} className="px-4 py-2 bg-white/10 hover:bg-white/20 rounded-xl text-xs font-black uppercase tracking-widest flex items-center gap-2 transition-all border border-white/10"><Database size={14}/> Archivio</button>
-          <button onClick={() => supabase.auth.signOut()} className="p-2 bg-red-500/10 text-red-400 hover:bg-red-500 hover:text-white rounded-xl transition-all border border-red-500/20"><LogOut size={16}/></button>
+          {/* Fixed: Cast auth to any for signOut method access */}
+          <button onClick={() => (supabase.auth as any).signOut()} className="p-2 bg-red-500/10 text-red-400 hover:bg-red-500 hover:text-white rounded-xl transition-all border border-red-500/20"><LogOut size={16}/></button>
         </div>
       </header>
 
@@ -444,6 +447,7 @@ const App: React.FC = () => {
                               </div>
                             </div>
                             <div className="flex items-center gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                              <button onClick={() => generatePipetteLabelPDF(pipette)} className="p-2 bg-amber-500/10 text-amber-500 hover:bg-amber-500 hover:text-white rounded-xl transition-all" title="Stampa Etichetta"><Tag size={14}/></button>
                               <button onClick={() => loadPipette(pipette)} className={`p-2 ${activeTheme.bg} text-white rounded-xl shadow-lg`} title="Carica"><Upload size={14}/></button>
                               <button onClick={() => deletePipette(pipette.id)} className="p-2 bg-red-500/10 text-red-400 hover:bg-red-500 hover:text-white rounded-xl transition-all" title="Elimina"><Trash size={14}/></button>
                             </div>
