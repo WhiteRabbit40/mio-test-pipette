@@ -65,6 +65,7 @@ interface ThemeColors {
   fail: ColorTuple;
 }
 
+// Fix: Added missing 'teal' and 'sky' theme configurations to satisfy the Record constraint for Exclude<PdfTheme, 'custom'>
 const BASE_THEMES: Record<Exclude<PdfTheme, 'custom'>, ThemeColors> = {
   default: {
     primary: [76, 29, 149], accent: [124, 58, 237], blue: [59, 130, 246],
@@ -80,6 +81,16 @@ const BASE_THEMES: Record<Exclude<PdfTheme, 'custom'>, ThemeColors> = {
     primary: [30, 30, 30], accent: [80, 80, 80], blue: [150, 150, 150],
     textDark: [0, 0, 0], textMed: [60, 60, 60], textLight: [100, 100, 100],
     divider: [200, 200, 200], bgLight: [250, 250, 250], success: [80, 80, 80], fail: [0, 0, 0]
+  },
+  teal: {
+    primary: [13, 148, 136], accent: [20, 184, 166], blue: [45, 212, 191],
+    textDark: [17, 24, 39], textMed: [55, 65, 81], textLight: [107, 114, 128],
+    divider: [229, 231, 235], bgLight: [240, 253, 250], success: [5, 150, 105], fail: [220, 38, 38]
+  },
+  sky: {
+    primary: [2, 132, 199], accent: [14, 165, 233], blue: [56, 189, 248],
+    textDark: [17, 24, 39], textMed: [55, 65, 81], textLight: [107, 114, 128],
+    divider: [229, 231, 235], bgLight: [240, 249, 255], success: [5, 150, 105], fail: [220, 38, 38]
   }
 };
 
