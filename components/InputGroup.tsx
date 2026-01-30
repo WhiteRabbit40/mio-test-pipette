@@ -5,7 +5,8 @@ import { UiTheme } from '../types';
 interface InputGroupProps {
   label: string;
   value: string | number;
-  onChange: (e: React.ChangeEvent<HTMLInputElement>) => void;
+  // Made optional to satisfy read-only usage in App.tsx
+  onChange?: (e: React.ChangeEvent<HTMLInputElement>) => void;
   type?: string;
   placeholder?: string;
   step?: string;
