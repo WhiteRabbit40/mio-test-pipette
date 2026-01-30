@@ -49,7 +49,7 @@ const App: React.FC = () => {
   
   const [showDbModal, setShowDbModal] = useState(false);
   const [showLabelModal, setShowLabelModal] = useState(false);
-  const [labelCount, setLabelCount] = useState(18); // Default grid multiplier
+  const [labelCount, setLabelCount] = useState(54);
 
   const [clients, setClients] = useState<Client[]>([]);
   const [storedPipettes, setStoredPipettes] = useState<StoredPipette[]>([]);
@@ -87,7 +87,6 @@ const App: React.FC = () => {
 
   useEffect(() => {
     if (data.temperature !== '' && data.pressure !== '') {
-      // Open-Meteo returns pressure in hPa. Conversion to kPa happens inside calculateZFactor by factor 0.1
       const newZ = calculateZFactor(Number(data.temperature), Number(data.pressure) * 0.1);
       setData(prev => ({ ...prev, zFactor: newZ }));
     }
@@ -188,53 +187,48 @@ const App: React.FC = () => {
         lat = pos.coords.latitude; lon = pos.coords.longitude;
       }
 
-      const today = new Date();
-      today.setHours(0,0,0,0);
-      const testDate = new Date(data.testDate);
-      testDate.setHours(0,0,0,0);
-      
-      const diffTime = testDate.getTime() - today.getTime();
+      const today = new Date(); today.setHours(0,0,0,0);
+      const testDateObj = new Date(data.testDate); testDateObj.setHours(0,0,0,0);
+      const diffTime = testDateObj.getTime() - today.getTime();
       const diffDays = Math.ceil(diffTime / (1000 * 3600 * 24));
       
       let temp: number, press: number;
+      let label = "";
 
       if (diffDays < 0) {
-        // DATI STORICI (Archivio)
-        const dateStr = testDate.toISOString().split('T')[0];
+        const dateStr = data.testDate;
         const res = await fetch(`https://archive-api.open-meteo.com/v1/archive?latitude=${lat}&longitude=${lon}&start_date=${dateStr}&end_date=${dateStr}&hourly=temperature_2m,surface_pressure`);
         const weather = await res.json();
-        if (!weather.hourly) throw new Error("Dati storici non disponibili per questa località/data");
-        temp = weather.hourly.temperature_2m[12]; // Ore 12:00
+        temp = weather.hourly.temperature_2m[12];
         press = weather.hourly.surface_pressure[12];
-        setWeatherType("Dato Storico (Archivio)");
+        label = "Dato Storico";
       } else if (diffDays <= 7) {
-        // PREVISIONE (Forecast)
         const res = await fetch(`https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&current=temperature_2m,surface_pressure&hourly=temperature_2m,surface_pressure`);
         const weather = await res.json();
         if (diffDays === 0) {
           temp = weather.current.temperature_2m;
           press = weather.current.surface_pressure;
-          setWeatherType("Meteo Real-Time");
+          label = "Meteo Reale";
         } else {
           temp = weather.hourly.temperature_2m[diffDays * 24 + 12];
           press = weather.hourly.surface_pressure[diffDays * 24 + 12];
-          setWeatherType("Meteo Previsionale");
+          label = "Previsione";
         }
       } else {
-        // STIMA STAGIONALE (Basata sull'anno scorso)
-        const historicalDate = new Date(testDate.getFullYear() - 1, testDate.getMonth(), testDate.getDate());
-        const dateStr = historicalDate.toISOString().split('T')[0];
+        const lastYear = new Date(testDateObj); lastYear.setFullYear(lastYear.getFullYear() - 1);
+        const dateStr = lastYear.toISOString().split('T')[0];
         const res = await fetch(`https://archive-api.open-meteo.com/v1/archive?latitude=${lat}&longitude=${lon}&start_date=${dateStr}&end_date=${dateStr}&hourly=temperature_2m,surface_pressure`);
         const weather = await res.json();
         temp = weather.hourly.temperature_2m[12];
         press = weather.hourly.surface_pressure[12];
-        setWeatherType("Stima Stagionale (Anno Prec.)");
+        label = "Stima Stagionale";
       }
-      
+
       setData(prev => ({ ...prev, temperature: temp, pressure: press }));
-      setNotification({ message: `Dati ambientali recuperati con successo`, type: 'success', visible: true });
+      setWeatherType(label);
+      setNotification({ message: `Meteo recuperato (${label})`, type: 'success', visible: true });
     } catch (err: any) {
-      setNotification({ message: `Errore Meteo: ${err.message}`, type: 'error', visible: true });
+      setNotification({ message: `Errore: ${err.message}`, type: 'error', visible: true });
     } finally { setWeatherLoading(false); }
   };
 
