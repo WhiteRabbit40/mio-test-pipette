@@ -3,13 +3,13 @@ import React, { useState, useEffect, useRef } from 'react';
 import { supabase, isSupabaseConfigured } from './supabaseClient';
 import { Auth } from './components/Auth';
 import { Session } from '@supabase/supabase-js';
-import { Beaker, Wind, Save, Settings, FileText, Gauge, Info, CheckCircle2, AlertCircle, X, Database, LogOut, Loader2, ShieldAlert, Eye, EyeOff, Download, Layers, Calendar, Thermometer, Activity, User, Plus, Upload, FileSpreadsheet, Trash2, Search, Filter, CloudRain, MapPin, Settings2, ShieldCheck, Palette, Sparkles, ChevronRight, History, Trash } from 'lucide-react';
+import { Beaker, Wind, Save, Settings, FileText, Gauge, Info, CheckCircle2, AlertCircle, X, Database, LogOut, Loader2, ShieldAlert, Eye, EyeOff, Download, Layers, Calendar, Thermometer, Activity, User, Plus, Upload, FileSpreadsheet, Trash2, Search, Filter, CloudRain, MapPin, Settings2, ShieldCheck, Palette, Sparkles, ChevronRight, History, Trash, Printer } from 'lucide-react';
 import { CalibrationData, PipetteType, Client, StoredPipette, UiTheme } from './types';
 import { INITIAL_MEASUREMENTS_FIXED, INITIAL_MEASUREMENTS_VAR, DEFAULT_Z_FACTOR, calculateZFactor, ISO_TOLERANCES_DATA, PIPETTE_PRESETS } from './constants';
 import { InputGroup } from './components/InputGroup';
 import { MeasurementSection } from './components/MeasurementSection';
 import { LiveChart } from './components/LiveChart';
-import { generatePDF, getPDFPreviewURL } from './services/pdfGenerator';
+import { generatePDF, getPDFPreviewURL, generateClientListPDF } from './services/pdfGenerator';
 import { CustomDatePicker } from './components/CustomDatePicker';
 
 const THEME_CONFIG = {
@@ -122,6 +122,13 @@ const App: React.FC = () => {
     if (!error) {
       setStoredPipettes(prev => prev.filter(p => p.id !== id));
       setNotification({ message: "Record eliminato", type: 'success', visible: true });
+    }
+  };
+
+  const handlePrintClientList = () => {
+    const client = clients.find(c => c.id === selectedClientId);
+    if (client && storedPipettes.length > 0) {
+      generateClientListPDF(client.name, storedPipettes, uiTheme);
     }
   };
 
@@ -355,31 +362,44 @@ const App: React.FC = () => {
                   </div>
                 ) : dbLoading ? (
                   <div className="h-full flex items-center justify-center"><Loader2 className={`animate-spin ${activeTheme.accent}`} size={32} /></div>
-                ) : storedPipettes.length === 0 ? (
-                  <div className="h-full flex flex-col items-center justify-center text-center space-y-4 opacity-30">
-                    <History size={48} />
-                    <p className="text-sm font-bold uppercase tracking-widest">Nessuna taratura trovata per questo cliente</p>
-                  </div>
                 ) : (
-                  <div className="grid grid-cols-1 gap-4">
-                    {storedPipettes.map(pipette => (
-                      <div key={pipette.id} className="bg-white/5 border border-white/5 p-5 rounded-3xl hover:border-white/20 transition-all group flex items-center justify-between">
-                        <div className="flex-1 cursor-pointer" onClick={() => loadPipette(pipette)}>
-                          <div className="flex items-center gap-3 mb-1">
-                            <span className="text-xs font-black uppercase tracking-wider text-white">{pipette.manufacturer} {pipette.model}</span>
-                            <span className={`text-[8px] font-bold px-2 py-0.5 rounded-full ${activeTheme.bgLight} ${activeTheme.accent}`}>{pipette.nominal_volume}</span>
-                          </div>
-                          <div className="flex items-center gap-4 text-[10px] text-white/40 font-bold">
-                            <span className="flex items-center gap-1"><Info size={10}/> S/N: {pipette.serial_number}</span>
-                            <span className="flex items-center gap-1"><Calendar size={10}/> {new Date(pipette.last_calibrated).toLocaleDateString('it-IT')}</span>
-                          </div>
-                        </div>
-                        <div className="flex items-center gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
-                          <button onClick={() => loadPipette(pipette)} className={`p-2 ${activeTheme.bg} text-white rounded-xl shadow-lg`} title="Carica"><Upload size={14}/></button>
-                          <button onClick={() => deletePipette(pipette.id)} className="p-2 bg-red-500/10 text-red-400 hover:bg-red-500 hover:text-white rounded-xl transition-all" title="Elimina"><Trash size={14}/></button>
-                        </div>
+                  <div className="flex flex-col h-full">
+                    <div className="flex justify-between items-center mb-6">
+                       <h4 className="text-xs font-black uppercase tracking-[0.2em] text-white/50">Storico Strumenti ({storedPipettes.length})</h4>
+                       {storedPipettes.length > 0 && (
+                         <button onClick={handlePrintClientList} className={`flex items-center gap-2 px-4 py-2 ${activeTheme.bg} text-white rounded-xl text-[10px] font-black uppercase tracking-widest shadow-lg transition-all hover:scale-105 active:scale-95`}>
+                           <Printer size={14}/> Stampa Elenco
+                         </button>
+                       )}
+                    </div>
+
+                    {storedPipettes.length === 0 ? (
+                      <div className="flex-1 flex flex-col items-center justify-center text-center space-y-4 opacity-30">
+                        <History size={48} />
+                        <p className="text-sm font-bold uppercase tracking-widest">Nessuna taratura trovata per questo cliente</p>
                       </div>
-                    ))}
+                    ) : (
+                      <div className="grid grid-cols-1 gap-4">
+                        {storedPipettes.map(pipette => (
+                          <div key={pipette.id} className="bg-white/5 border border-white/5 p-5 rounded-3xl hover:border-white/20 transition-all group flex items-center justify-between">
+                            <div className="flex-1 cursor-pointer" onClick={() => loadPipette(pipette)}>
+                              <div className="flex items-center gap-3 mb-1">
+                                <span className="text-xs font-black uppercase tracking-wider text-white">{pipette.manufacturer} {pipette.model}</span>
+                                <span className={`text-[8px] font-bold px-2 py-0.5 rounded-full ${activeTheme.bgLight} ${activeTheme.accent}`}>{pipette.nominal_volume}</span>
+                              </div>
+                              <div className="flex items-center gap-4 text-[10px] text-white/40 font-bold">
+                                <span className="flex items-center gap-1"><Info size={10}/> S/N: {pipette.serial_number}</span>
+                                <span className="flex items-center gap-1"><Calendar size={10}/> {new Date(pipette.last_calibrated).toLocaleDateString('it-IT')}</span>
+                              </div>
+                            </div>
+                            <div className="flex items-center gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                              <button onClick={() => loadPipette(pipette)} className={`p-2 ${activeTheme.bg} text-white rounded-xl shadow-lg`} title="Carica"><Upload size={14}/></button>
+                              <button onClick={() => deletePipette(pipette.id)} className="p-2 bg-red-500/10 text-red-400 hover:bg-red-500 hover:text-white rounded-xl transition-all" title="Elimina"><Trash size={14}/></button>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
                   </div>
                 )}
               </div>
