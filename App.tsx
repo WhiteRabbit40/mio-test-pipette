@@ -49,7 +49,7 @@ const App: React.FC = () => {
   
   const [showDbModal, setShowDbModal] = useState(false);
   const [showLabelModal, setShowLabelModal] = useState(false);
-  const [labelCount, setLabelCount] = useState(15);
+  const [labelCount, setLabelCount] = useState(18); // Default grid multiplier
 
   const [clients, setClients] = useState<Client[]>([]);
   const [storedPipettes, setStoredPipettes] = useState<StoredPipette[]>([]);
@@ -87,6 +87,7 @@ const App: React.FC = () => {
 
   useEffect(() => {
     if (data.temperature !== '' && data.pressure !== '') {
+      // Open-Meteo returns pressure in hPa. Conversion to kPa happens inside calculateZFactor by factor 0.1
       const newZ = calculateZFactor(Number(data.temperature), Number(data.pressure) * 0.1);
       setData(prev => ({ ...prev, zFactor: newZ }));
     }
@@ -180,7 +181,7 @@ const App: React.FC = () => {
       if (locationSearch.trim()) {
         const geoRes = await fetch(`https://geocoding-api.open-meteo.com/v1/search?name=${encodeURIComponent(locationSearch)}&count=1&language=it&format=json`);
         const geoData = await geoRes.json();
-        if (!geoData.results) throw new Error("Località non trovata");
+        if (!geoData.results || geoData.results.length === 0) throw new Error("Località non trovata");
         lat = geoData.results[0].latitude; lon = geoData.results[0].longitude;
       } else {
         const pos = await new Promise<GeolocationPosition>((resolve, reject) => navigator.geolocation.getCurrentPosition(resolve, reject));
@@ -188,27 +189,52 @@ const App: React.FC = () => {
       }
 
       const today = new Date();
+      today.setHours(0,0,0,0);
       const testDate = new Date(data.testDate);
-      const diffDays = (testDate.getTime() - today.getTime()) / (1000 * 3600 * 24);
+      testDate.setHours(0,0,0,0);
+      
+      const diffTime = testDate.getTime() - today.getTime();
+      const diffDays = Math.ceil(diffTime / (1000 * 3600 * 24));
+      
       let temp: number, press: number;
 
-      if (diffDays > 7 || diffDays < 0) {
-        const historicalDate = diffDays > 7 ? new Date(testDate.getFullYear() - 1, testDate.getMonth(), testDate.getDate()) : testDate;
+      if (diffDays < 0) {
+        // DATI STORICI (Archivio)
+        const dateStr = testDate.toISOString().split('T')[0];
+        const res = await fetch(`https://archive-api.open-meteo.com/v1/archive?latitude=${lat}&longitude=${lon}&start_date=${dateStr}&end_date=${dateStr}&hourly=temperature_2m,surface_pressure`);
+        const weather = await res.json();
+        if (!weather.hourly) throw new Error("Dati storici non disponibili per questa località/data");
+        temp = weather.hourly.temperature_2m[12]; // Ore 12:00
+        press = weather.hourly.surface_pressure[12];
+        setWeatherType("Dato Storico (Archivio)");
+      } else if (diffDays <= 7) {
+        // PREVISIONE (Forecast)
+        const res = await fetch(`https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&current=temperature_2m,surface_pressure&hourly=temperature_2m,surface_pressure`);
+        const weather = await res.json();
+        if (diffDays === 0) {
+          temp = weather.current.temperature_2m;
+          press = weather.current.surface_pressure;
+          setWeatherType("Meteo Real-Time");
+        } else {
+          temp = weather.hourly.temperature_2m[diffDays * 24 + 12];
+          press = weather.hourly.surface_pressure[diffDays * 24 + 12];
+          setWeatherType("Meteo Previsionale");
+        }
+      } else {
+        // STIMA STAGIONALE (Basata sull'anno scorso)
+        const historicalDate = new Date(testDate.getFullYear() - 1, testDate.getMonth(), testDate.getDate());
         const dateStr = historicalDate.toISOString().split('T')[0];
         const res = await fetch(`https://archive-api.open-meteo.com/v1/archive?latitude=${lat}&longitude=${lon}&start_date=${dateStr}&end_date=${dateStr}&hourly=temperature_2m,surface_pressure`);
         const weather = await res.json();
-        temp = weather.hourly.temperature_2m[12]; press = weather.hourly.surface_pressure[12];
-        setWeatherType(diffDays > 7 ? "Stima Stagionale" : "Dato Storico");
-      } else {
-        const res = await fetch(`https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&current=temperature_2m,surface_pressure`);
-        const weather = await res.json();
-        temp = weather.current.temperature_2m; press = weather.current.surface_pressure;
-        setWeatherType("Previsione Real-Time");
+        temp = weather.hourly.temperature_2m[12];
+        press = weather.hourly.surface_pressure[12];
+        setWeatherType("Stima Stagionale (Anno Prec.)");
       }
+      
       setData(prev => ({ ...prev, temperature: temp, pressure: press }));
-      setNotification({ message: `Meteo aggiornato`, type: 'success', visible: true });
+      setNotification({ message: `Dati ambientali recuperati con successo`, type: 'success', visible: true });
     } catch (err: any) {
-      setNotification({ message: err.message, type: 'error', visible: true });
+      setNotification({ message: `Errore Meteo: ${err.message}`, type: 'error', visible: true });
     } finally { setWeatherLoading(false); }
   };
 
@@ -336,7 +362,7 @@ const App: React.FC = () => {
                   <div className="flex items-center gap-2 bg-black/30 p-2 rounded-2xl border border-white/5">
                     <div className="relative">
                       <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-white/30" size={14} />
-                      <input type="text" placeholder="Località..." value={locationSearch} onChange={(e) => setLocationSearch(e.target.value)} className="bg-transparent text-xs text-white pl-9 pr-3 py-1.5 outline-none w-40 md:w-64" />
+                      <input type="text" placeholder="Località per meteo..." value={locationSearch} onChange={(e) => setLocationSearch(e.target.value)} className="bg-transparent text-xs text-white pl-9 pr-3 py-1.5 outline-none w-40 md:w-64" />
                     </div>
                     <button onClick={fetchWeather} disabled={weatherLoading} className={`px-4 py-1.5 ${activeTheme.bg} text-white hover:opacity-90 rounded-xl text-[10px] font-black uppercase tracking-wider flex items-center gap-2 transition-all`}>
                       {weatherLoading ? <Loader2 className="animate-spin" size={12}/> : <Sparkles size={12}/>} Rileva
@@ -396,9 +422,9 @@ const App: React.FC = () => {
                 <h3 className="text-xl font-bold flex items-center gap-3"><Tag className="text-amber-500"/> Stampa Etichette</h3>
                 <button onClick={() => setShowLabelModal(false)} className="text-white/30 hover:text-white"><X size={24}/></button>
               </div>
-              <p className="text-sm text-white/50">Quante etichette vuoi stampare? (Layout compatto 3x15 per foglio A4)</p>
+              <p className="text-sm text-white/50">Quante etichette vuoi stampare? (Layout ultra-compatto 3x18 per A4)</p>
               <div className="grid grid-cols-4 gap-2">
-                {[15, 30, 45, 90].map(n => (
+                {[18, 36, 54, 108].map(n => (
                   <button key={n} onClick={() => setLabelCount(n)} className={`py-3 rounded-2xl font-black text-xs transition-all ${labelCount === n ? 'bg-amber-500 text-white' : 'bg-white/5 text-white/40 hover:bg-white/10'}`}>{n}</button>
                 ))}
               </div>
