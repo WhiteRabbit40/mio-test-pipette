@@ -244,8 +244,8 @@ export const generateClientListPDF = (clientName: string, pipettes: StoredPipett
   doc.setFontSize(10); doc.text(`CLIENTE: ${clientName.toUpperCase()}`, 14, curY);
   autoTable(doc, { 
     startY: curY + 10, 
-    head: [['S/N', 'MARCA', 'MODELLO', 'VOLUME', 'ULTIMA TARATURA']], 
-    body: pipettes.map(p => [p.serial_number, p.manufacturer, p.model, p.nominal_volume, new Date(p.last_calibrated).toLocaleDateString()]),
+    head: [['MARCA', 'MODELLO', 'SERIALE', 'VOLUME', 'ULTIMA TARATURA']], 
+    body: pipettes.map(p => [p.manufacturer, p.model, p.serial_number, p.nominal_volume, new Date(p.last_calibrated).toLocaleDateString()]),
     headStyles: { fillColor: theme.primary }
   });
   doc.save(`elenco_strumenti_2S_${clientName}.pdf`);
