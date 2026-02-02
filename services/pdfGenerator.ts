@@ -74,12 +74,8 @@ const drawPdfChart = (doc: jsPDF, x: number, y: number, w: number, h: number, st
   const startY = y + paddingT;
 
   const sysTol = Number(tol) || target * 0.05;
-  
-  // LOGICA ZOOM ADATTIVO: centrato sul target, ampio quanto basta per vedere tolleranza e fluttuazioni
   const dataMin = Math.min(...volumes);
   const dataMax = Math.max(...volumes);
-  
-  // Cerchiamo di stare dentro i limiti ISO se possibile, altrimenti allarghiamo
   const displayRange = Math.max(sysTol * 2.2, (dataMax - dataMin) * 2.5);
   const minVal = target - (displayRange / 2);
   const maxVal = target + (displayRange / 2);
@@ -88,7 +84,6 @@ const drawPdfChart = (doc: jsPDF, x: number, y: number, w: number, h: number, st
   const getX = (i: number) => startX + (i * chartW / 9);
   const getY = (v: number) => startY + chartH - ((v - minVal) / (range || 1) * chartH);
 
-  // Griglia Millimetrata (Più visibile)
   doc.setDrawColor(240, 240, 240);
   doc.setLineWidth(0.05);
   const steps = 6;
@@ -101,7 +96,6 @@ const drawPdfChart = (doc: jsPDF, x: number, y: number, w: number, h: number, st
     doc.text(v.toFixed(3).toString(), startX - 2, py + 1, { align: 'right' });
   }
 
-  // EVIDENZIAZIONE ±2SD (INCERTEZZA)
   const u2sd = stats.meanVolume + (2 * stats.sd);
   const l2sd = stats.meanVolume - (2 * stats.sd);
   doc.setFillColor(...colors.accent);
@@ -111,23 +105,19 @@ const drawPdfChart = (doc: jsPDF, x: number, y: number, w: number, h: number, st
   doc.rect(startX, rectTop, chartW, Math.abs(rectBottom - rectTop), 'F');
   doc.setGState(new (doc as any).GState({ opacity: 1 }));
 
-  // Limiti ISO (Linee Rosse Tratteggiate)
   doc.setDrawColor(...colors.fail); doc.setLineWidth(0.4); doc.setLineDashPattern([1.5, 1], 0);
   doc.line(startX, getY(target + sysTol), startX + chartW, getY(target + sysTol));
   doc.line(startX, getY(target - sysTol), startX + chartW, getY(target - sysTol));
   
-  // Linea Nominale (Target)
   doc.setDrawColor(...colors.primary); doc.setLineWidth(0.3); doc.setLineDashPattern([3, 2], 0);
   doc.line(startX, getY(target), startX + chartW, getY(target));
   doc.setLineDashPattern([], 0);
 
-  // Curva di Stabilità
   doc.setDrawColor(...colors.primary); doc.setLineWidth(1.1);
   for (let i = 0; i < volumes.length - 1; i++) {
     doc.line(getX(i), getY(volumes[i]), getX(i + 1), getY(volumes[i + 1]));
   }
   
-  // Punti Campionamento
   volumes.forEach((v, i) => {
     doc.setFillColor(...colors.primary); doc.circle(getX(i), getY(v), 1.0, 'F');
     doc.setFillColor(255, 255, 255); doc.circle(getX(i), getY(v), 0.35, 'F');
@@ -146,17 +136,11 @@ const drawStatsDashboard = (doc: jsPDF, curY: number, stats: CalculatedStats, ta
   
   const drawCard = (x: number, label: string, val: string, unit: string, tol?: number, cur?: number) => {
     doc.setFillColor(252, 252, 252); doc.setDrawColor(200, 200, 200); doc.roundedRect(x, startY, cardW, cardH, 2, 2, 'FD');
-    
-    // Titolo Card (Più marcato)
     doc.setFontSize(8.5); doc.setTextColor(60, 60, 60); doc.setFont('helvetica', 'bold');
     doc.text(label.toUpperCase(), x + 3, startY + 8);
-    
-    // Valore Principale
     doc.setFontSize(11.5); doc.setTextColor(10, 10, 10); doc.setFont('helvetica', 'bold');
     const valText = String(val);
     doc.text(valText, x + 3, startY + 20);
-    
-    // Unità accanto al numero (Più leggibile)
     const valWidth = doc.getTextWidth(valText);
     doc.setFontSize(9.5); doc.setTextColor(80, 80, 80); doc.setFont('helvetica', 'normal');
     doc.text(unit, x + 3 + valWidth + 1.8, startY + 20);
@@ -175,7 +159,6 @@ const drawStatsDashboard = (doc: jsPDF, curY: number, stats: CalculatedStats, ta
   drawCard(14 + (cardW+gap)*3, "SD (Ripet.)", fmt(stats.sd, 4), "µl", Number(tolRand), stats.sd);
   drawCard(14 + (cardW+gap)*4, "Incertezza", fmt(stats.uncertainty, 3), "µl");
 
-  // PROPORZIONI GRAFICO CICCIONE (Altezza portata a 88 per un look professionale)
   drawPdfChart(doc, 14, startY + cardH + 7, 183, 88, stats, targetVol, tolSys, colors);
   return startY + cardH + 115;
 };
@@ -261,8 +244,8 @@ export const generateClientListPDF = (clientName: string, pipettes: StoredPipett
   doc.setFontSize(10); doc.text(`CLIENTE: ${clientName.toUpperCase()}`, 14, curY);
   autoTable(doc, { 
     startY: curY + 10, 
-    head: [['S/N', 'MODELLO', 'VOLUME', 'ULTIMA TARATURA']], 
-    body: pipettes.map(p => [p.serial_number, p.model, p.nominal_volume, new Date(p.last_calibrated).toLocaleDateString()]),
+    head: [['S/N', 'MARCA', 'MODELLO', 'VOLUME', 'ULTIMA TARATURA']], 
+    body: pipettes.map(p => [p.serial_number, p.manufacturer, p.model, p.nominal_volume, new Date(p.last_calibrated).toLocaleDateString()]),
     headStyles: { fillColor: theme.primary }
   });
   doc.save(`elenco_strumenti_2S_${clientName}.pdf`);

@@ -3,7 +3,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { supabase, isSupabaseConfigured } from './supabaseClient';
 import { Auth } from './components/Auth';
 import type { Session } from '@supabase/supabase-js';
-import { Beaker, Wind, Save, Settings, FileText, Gauge, Info, CheckCircle2, AlertCircle, X, Database, LogOut, Loader2, ShieldAlert, Eye, EyeOff, Download, Layers, Calendar, Thermometer, Activity, User, Plus, Upload, FileSpreadsheet, Trash2, Search, Filter, CloudRain, MapPin, Settings2, ShieldCheck, Palette, Sparkles, ChevronRight, History, Trash, Printer, Ruler, Tag, FileDown } from 'lucide-react';
+import { Beaker, Wind, Save, Settings, FileText, Gauge, Info, CheckCircle2, AlertCircle, X, Database, LogOut, Loader2, ShieldAlert, Eye, EyeOff, Download, Layers, Calendar, Thermometer, Activity, User, Plus, Upload, FileSpreadsheet, Trash2, Search, Filter, CloudRain, MapPin, Settings2, ShieldCheck, Palette, Sparkles, ChevronRight, History, Trash, Printer, Ruler, Tag, FileDown, SortAsc, SortDesc } from 'lucide-react';
 import { CalibrationData, PipetteType, Client, StoredPipette, UiTheme } from './types';
 import { INITIAL_MEASUREMENTS_FIXED, INITIAL_MEASUREMENTS_VAR, DEFAULT_Z_FACTOR, calculateZFactor, ISO_TOLERANCES_DATA, PIPETTE_PRESETS } from './constants';
 import { InputGroup } from './components/InputGroup';
@@ -56,6 +56,7 @@ const App: React.FC = () => {
   const [selectedClientId, setSelectedClientId] = useState<string | null>(null);
   const [dbLoading, setDbLoading] = useState(false);
   const [clientSearch, setClientSearch] = useState("");
+  const [pipetteSortOrder, setPipetteSortOrder] = useState<'asc' | 'desc'>('asc');
 
   const [notification, setNotification] = useState<{ message: string; type: 'success' | 'error'; visible: boolean } | null>(null);
 
@@ -152,7 +153,7 @@ const App: React.FC = () => {
     if (!selectedClientId) return;
     const client = clients.find(c => c.id === selectedClientId);
     if (client) {
-      generateClientListPDF(client.name, storedPipettes, uiTheme);
+      generateClientListPDF(client.name, getSortedPipettes(), uiTheme);
     }
   };
 
@@ -236,6 +237,15 @@ const App: React.FC = () => {
     if (!showPreview) setPreviewUrl(getPDFPreviewURL({ ...data, uiTheme }));
     else { if (previewUrl) URL.revokeObjectURL(previewUrl); setPreviewUrl(null); }
     setShowPreview(!showPreview);
+  };
+
+  const getSortedPipettes = () => {
+    return [...storedPipettes].sort((a, b) => {
+      const nameA = `${a.manufacturer} ${a.model}`.toLowerCase();
+      const nameB = `${b.manufacturer} ${b.model}`.toLowerCase();
+      if (pipetteSortOrder === 'asc') return nameA.localeCompare(nameB);
+      return nameB.localeCompare(nameA);
+    });
   };
 
   if (!isSupabaseConfigured) return <div className="min-h-screen bg-slate-900 flex flex-col items-center justify-center p-6 text-center">
@@ -470,7 +480,16 @@ const App: React.FC = () => {
                 ) : (
                   <div className="flex flex-col h-full">
                     <div className="flex justify-between items-center mb-6">
-                       <h4 className="text-xs font-black uppercase tracking-[0.2em] text-white/50">Storico Strumenti ({storedPipettes.length})</h4>
+                       <div className="flex items-center gap-3">
+                         <h4 className="text-xs font-black uppercase tracking-[0.2em] text-white/50">Storico Strumenti ({storedPipettes.length})</h4>
+                         <button 
+                           onClick={() => setPipetteSortOrder(pipetteSortOrder === 'asc' ? 'desc' : 'asc')}
+                           className="p-1.5 hover:bg-white/10 rounded-lg text-white/40 hover:text-white transition-all"
+                           title="Ordina per nome"
+                         >
+                           {pipetteSortOrder === 'asc' ? <SortAsc size={14}/> : <SortDesc size={14}/>}
+                         </button>
+                       </div>
                        {storedPipettes.length > 0 && (
                          <button onClick={handlePrintClientList} className={`flex items-center gap-2 px-4 py-2 ${activeTheme.bg} text-white rounded-xl text-[10px] font-black uppercase tracking-widest shadow-lg transition-all hover:scale-105 active:scale-95`}>
                            <Printer size={14}/> Stampa Elenco
@@ -485,7 +504,7 @@ const App: React.FC = () => {
                       </div>
                     ) : (
                       <div className="grid grid-cols-1 gap-4">
-                        {storedPipettes.map(pipette => (
+                        {getSortedPipettes().map(pipette => (
                           <div key={pipette.id} className="bg-white/5 border border-white/5 p-5 rounded-3xl hover:border-white/20 transition-all group flex items-center justify-between">
                             <div className="flex-1 cursor-pointer" onClick={() => loadPipette(pipette)}>
                               <div className="flex items-center gap-3 mb-1">
