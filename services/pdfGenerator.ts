@@ -60,14 +60,14 @@ const drawPdfChart = (doc: jsPDF, x: number, y: number, w: number, h: number, st
   if (volumes.length === 0) return;
 
   doc.setFillColor(255, 255, 255);
-  doc.setDrawColor(220, 220, 220);
+  doc.setDrawColor(200, 200, 200);
   doc.setLineWidth(0.1);
   doc.rect(x, y, w, h, 'FD');
 
   const paddingL = 22;
   const paddingR = 10;
-  const paddingT = 15;
-  const paddingB = 15;
+  const paddingT = 18; // Aumentato padding superiore per titolo
+  const paddingB = 18; // Aumentato padding inferiore per etichette
   const chartW = w - (paddingL + paddingR);
   const chartH = h - (paddingT + paddingB);
   const startX = x + paddingL;
@@ -75,29 +75,32 @@ const drawPdfChart = (doc: jsPDF, x: number, y: number, w: number, h: number, st
 
   const sysTol = Number(tol) || target * 0.05;
   
-  // Zoom Tecnico: stringiamo la visualizzazione intorno al target +/- tolleranza
+  // ZOOM TECNICO OTTIMIZZATO: Range bilanciato tra tolleranza e dati reali
   const dataMin = Math.min(...volumes);
   const dataMax = Math.max(...volumes);
-  const toleranceRange = sysTol * 1.5;
+  const marginFactor = sysTol * 1.8; // Aumentato leggermente per dare più "respiro" verticale
   
-  let minVal = Math.min(target - toleranceRange, dataMin - (sysTol * 0.2));
-  let maxVal = Math.max(target + toleranceRange, dataMax + (sysTol * 0.2));
+  let minVal = Math.min(target - marginFactor, dataMin - (sysTol * 0.3));
+  let maxVal = Math.max(target + marginFactor, dataMax + (sysTol * 0.3));
   const range = maxVal - minVal;
 
   const getX = (i: number) => startX + (i * chartW / 9);
   const getY = (v: number) => startY + chartH - ((v - minVal) / (range || 1) * chartH);
 
-  // Griglia
-  doc.setDrawColor(245, 245, 245);
+  // Griglia millimetrata professionale
+  doc.setDrawColor(240, 240, 240);
   doc.setLineWidth(0.05);
-  for (let i = 0; i <= 5; i++) {
-    const v = minVal + (i * range / 5);
-    doc.line(startX, getY(v), startX + chartW, getY(v));
-    doc.setFontSize(5); doc.setTextColor(180, 180, 180);
-    doc.text(v.toFixed(3).toString(), startX - 2, getY(v) + 1, { align: 'right' });
+  const gridSteps = 6;
+  for (let i = 0; i <= gridSteps; i++) {
+    const v = minVal + (i * range / gridSteps);
+    const py = getY(v);
+    doc.line(startX, py, startX + chartW, py);
+    doc.setFontSize(6); // Caratteri asse Y leggermente più grandi
+    doc.setTextColor(150, 150, 150);
+    doc.text(v.toFixed(3).toString(), startX - 2, py + 1, { align: 'right' });
   }
 
-  // Area ±2SD
+  // Area di incertezza tecnica (±2SD)
   const u2sd = stats.meanVolume + (2 * stats.sd);
   const l2sd = stats.meanVolume - (2 * stats.sd);
   doc.setFillColor(...colors.accent);
@@ -105,53 +108,58 @@ const drawPdfChart = (doc: jsPDF, x: number, y: number, w: number, h: number, st
   doc.rect(startX, getY(Math.min(maxVal, u2sd)), chartW, Math.abs(getY(l2sd) - getY(u2sd)), 'F');
   doc.setGState(new (doc as any).GState({ opacity: 1 }));
 
-  // Limiti Tolleranza
+  // Limiti di specifica (Linee tratteggiate rosse)
   doc.setDrawColor(...colors.fail); doc.setLineWidth(0.4); doc.setLineDashPattern([1.5, 1], 0);
   doc.line(startX, getY(target + sysTol), startX + chartW, getY(target + sysTol));
   doc.line(startX, getY(target - sysTol), startX + chartW, getY(target - sysTol));
   
-  // Linea Target
+  // Valore Nominale (Target)
   doc.setDrawColor(...colors.primary); doc.setLineWidth(0.3); doc.setLineDashPattern([3, 2], 0);
   doc.line(startX, getY(target), startX + chartW, getY(target));
   doc.setLineDashPattern([], 0);
 
-  // Curva Dati
-  doc.setDrawColor(...colors.primary); doc.setLineWidth(0.7);
+  // Curva di calibrazione
+  doc.setDrawColor(...colors.primary); doc.setLineWidth(0.9);
   for (let i = 0; i < volumes.length - 1; i++) {
     doc.line(getX(i), getY(volumes[i]), getX(i + 1), getY(volumes[i + 1]));
   }
+  
+  // Punti campionamento
   volumes.forEach((v, i) => {
-    doc.setFillColor(...colors.primary); doc.circle(getX(i), getY(v), 0.7, 'F');
-    doc.setFillColor(255, 255, 255); doc.circle(getX(i), getY(v), 0.25, 'F');
+    doc.setFillColor(...colors.primary); doc.circle(getX(i), getY(v), 0.8, 'F');
+    doc.setFillColor(255, 255, 255); doc.circle(getX(i), getY(v), 0.3, 'F');
   });
 
-  doc.setFont('helvetica', 'bold'); doc.setFontSize(6); doc.setTextColor(...colors.textDark);
-  doc.text("ANALISI PRESTAZIONI (µl)", startX, startY - 5);
+  doc.setFont('helvetica', 'bold'); doc.setFontSize(8); doc.setTextColor(...colors.textDark);
+  doc.text("ANALISI PERFORMANCE VOLUMETRICA (µl)", startX, startY - 7);
 };
 
 const drawStatsDashboard = (doc: jsPDF, curY: number, stats: CalculatedStats, targetVol: number, tolSys: number | '', tolRand: number | '', colors: ThemeColors, title: string) => {
   doc.setFont('helvetica', 'bold'); doc.setFontSize(10); doc.setTextColor(...colors.primary); doc.text(title.toUpperCase(), 14, curY);
-  const startY = curY + 4, cardW = 35, cardH = 28, gap = 2;
+  const startY = curY + 4, cardW = 35, cardH = 32, gap = 2; // Altezza card aumentata da 28 a 32
   
   const drawCard = (x: number, label: string, val: string, unit: string, tol?: number, cur?: number) => {
-    doc.setFillColor(252, 252, 252); doc.setDrawColor(235, 235, 235); doc.roundedRect(x, startY, cardW, cardH, 2, 2, 'FD');
-    doc.setFontSize(6); doc.setTextColor(150, 150, 150); doc.text(label.toUpperCase(), x + 3, startY + 6);
+    doc.setFillColor(252, 252, 252); doc.setDrawColor(220, 220, 220); doc.roundedRect(x, startY, cardW, cardH, 2, 2, 'FD');
     
-    // POSIZIONAMENTO UNITÀ ACCANTO AI NUMERI (FIX FOTO)
-    doc.setFontSize(10); doc.setTextColor(40, 40, 40); doc.setFont('helvetica', 'bold');
+    // Titolo card (più grande e visibile)
+    doc.setFontSize(7); doc.setTextColor(120, 120, 120); 
+    doc.text(label.toUpperCase(), x + 3, startY + 7);
+    
+    // Valore Principale
+    doc.setFontSize(11); doc.setTextColor(20, 20, 20); doc.setFont('helvetica', 'bold');
     const valText = String(val);
-    doc.text(valText, x + 3, startY + 16);
+    doc.text(valText, x + 3, startY + 18);
     
-    // Misura larghezza valore per piazzare l'unità esattamente a destra
+    // Unità di misura (ACCANTO ai numeri, font aumentato da 6 a 8)
     const valWidth = doc.getTextWidth(valText);
-    doc.setFontSize(6); doc.setTextColor(160, 160, 160); doc.setFont('helvetica', 'normal');
-    doc.text(unit, x + 3 + valWidth + 1.5, startY + 16);
+    doc.setFontSize(8); doc.setTextColor(140, 140, 140); doc.setFont('helvetica', 'normal');
+    doc.text(unit, x + 3 + valWidth + 2, startY + 18);
 
     if (tol && cur !== undefined) {
-      doc.setFillColor(242, 242, 242); doc.rect(x + 3, startY + 22, cardW - 6, 1.5, 'F');
+      doc.setFillColor(235, 235, 235); doc.rect(x + 3, startY + 25, cardW - 6, 1.8, 'F');
       const usage = Math.min(100, (Math.abs(cur)/tol)*100);
       doc.setFillColor(...(usage > 100 ? colors.fail : colors.success));
-      doc.rect(x + 3, startY + 22, (usage/100)*(cardW-6), 1.5, 'F');
+      doc.rect(x + 3, startY + 25, (usage/100)*(cardW-6), 1.8, 'F');
     }
   };
 
@@ -161,8 +169,9 @@ const drawStatsDashboard = (doc: jsPDF, curY: number, stats: CalculatedStats, ta
   drawCard(14 + (cardW+gap)*3, "SD (Ripet.)", fmt(stats.sd, 4), "µl", Number(tolRand), stats.sd);
   drawCard(14 + (cardW+gap)*4, "Incertezza", fmt(stats.uncertainty, 3), "µl");
 
-  drawPdfChart(doc, 14, startY + cardH + 4, 183, 52, stats, targetVol, tolSys, colors);
-  return startY + cardH + 64;
+  // Grafico reso più "ciccione": altezza aumentata da 52 a 68
+  drawPdfChart(doc, 14, startY + cardH + 5, 183, 68, stats, targetVol, tolSys, colors);
+  return startY + cardH + 82;
 };
 
 export const generateLabelsSheetPDF = (count: number, date: string, frequencyMonths: number, themeKey: UiTheme = 'violet') => {
@@ -212,27 +221,27 @@ export const createCalibrationPDF = (data: CalibrationData, returnBlob = false):
     fields.forEach((f, i) => {
       const x = 14 + (i * w);
       doc.setFillColor(248, 248, 248); doc.rect(x, y, w - 1, 10, 'F');
-      doc.setFontSize(5); doc.setTextColor(150, 150, 150); doc.text(f.l.toUpperCase(), x + 2, y + 3);
-      doc.setFontSize(8); doc.setTextColor(40, 40, 40); doc.text(String(f.v || '-'), x + 2, y + 8);
+      doc.setFontSize(6); doc.setTextColor(130, 130, 130); doc.text(f.l.toUpperCase(), x + 2, y + 3.5);
+      doc.setFontSize(9); doc.setTextColor(30, 30, 30); doc.text(String(f.v || '-'), x + 2, y + 8);
     });
   };
 
   drawRow(curY, [{l: 'Costruttore', v: String(data.manufacturer)}, {l: 'Modello', v: String(data.model)}, {l: 'S/N', v: String(data.serialNumber)}, {l: 'Vol. Nominale', v: `${data.nominalVolume} ${data.nominalVolumeUnit}`}]);
   curY += 12;
   drawRow(curY, [{l: 'Data Test', v: String(data.testDate)}, {l: 'Temp (°C)', v: String(data.temperature)}, {l: 'Pres (hPa)', v: String(data.pressure)}, {l: 'Fattore Z', v: fmt(z, 5)}]);
-  curY += 20;
+  curY += 22;
 
   if (data.type === PipetteType.FIXED) {
     curY = drawStatsDashboard(doc, curY, calculateStats(data.measurementsFixed, z, nomVol), nomVol, data.toleranceSystematic, data.toleranceRandom, theme, "Risultati Taratura");
   } else {
     curY = drawStatsDashboard(doc, curY, calculateStats(data.measurementsVarMin, z, nomVol*0.1), nomVol*0.1, data.toleranceSystematic, data.toleranceRandom, theme, "Punto 1: Volume Minimo (10%)");
-    if (curY > 190) { doc.addPage(); curY = 25; }
+    if (curY > 175) { doc.addPage(); curY = 25; }
     curY = drawStatsDashboard(doc, curY, calculateStats(data.measurementsVarMid, z, nomVol*0.5), nomVol*0.5, data.toleranceSystematic, data.toleranceRandom, theme, "Punto 2: Volume Medio (50%)");
-    if (curY > 190) { doc.addPage(); curY = 25; }
+    if (curY > 175) { doc.addPage(); curY = 25; }
     curY = drawStatsDashboard(doc, curY, calculateStats(data.measurementsVarMax, z, nomVol), nomVol, data.toleranceSystematic, data.toleranceRandom, theme, "Punto 3: Volume Massimo (100%)");
   }
 
-  doc.setFontSize(7); doc.setTextColor(150, 150, 150); doc.text("Generato con PipetteCal 2S - Conformità ISO 8655. Firma obbligatoria per validità legale.", 14, 285);
+  doc.setFontSize(8); doc.setTextColor(140, 140, 140); doc.text("Generato con PipetteCal 2S - Conformità ISO 8655. Firma e Timbro necessari per validità legale.", 14, 285);
   return returnBlob ? doc.output('bloburl') : doc.save(`cert_2S_${data.serialNumber}.pdf`);
 };
 
