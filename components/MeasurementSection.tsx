@@ -38,6 +38,25 @@ const MeasurementInputs: React.FC<{
   theme: UiTheme;
 }> = ({ values, onChange, label, icon, idPrefix, zFactor, target, tol, theme }) => {
   const style = THEME_STYLES[theme];
+
+  const handlePaste = (e: React.ClipboardEvent) => {
+    const pasteData = e.clipboardData.getData('text');
+    const rows = pasteData.split(/\r?\n/).filter(r => r.trim() !== "");
+    
+    // Se è una colonna di numeri, distribuisci
+    if (rows.length > 1) {
+      e.preventDefault();
+      rows.forEach((row, i) => {
+        if (i < 10) {
+          const val = row.trim().replace(',', '.');
+          if (!isNaN(parseFloat(val))) {
+            onChange(i, val);
+          }
+        }
+      });
+    }
+  };
+
   return (
     <div className={`bg-black/20 p-5 rounded-[28px] border border-white/5 ${style.hover} transition-all duration-300 shadow-inner group/section`}>
       <h3 className="text-white/70 font-black mb-5 flex items-center gap-3">
@@ -48,14 +67,21 @@ const MeasurementInputs: React.FC<{
         {values.map((val, idx) => {
           let isError = false;
           if (val !== '' && tol !== '' && target > 0) {
-            if (Math.abs((val as number) * zFactor - target) > tol) isError = true;
+            // Verifica live se la singola pesata (convertita in volume) è fuori tolleranza sistematica
+            if (Math.abs((val as number) * zFactor - target) > (Number(tol) || 0)) isError = true;
           }
           return (
             <div key={idx} className="relative group">
               <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-[8px] text-white/20 font-black pointer-events-none group-focus-within:text-white/60">{idx + 1}</span>
-              <input id={`${idPrefix}-${idx}`} type="number" value={val} onChange={(e) => onChange(idx, e.target.value)} 
+              <input 
+                id={`${idPrefix}-${idx}`} 
+                type="number" 
+                value={val} 
+                onChange={(e) => onChange(idx, e.target.value)} 
+                onPaste={idx === 0 ? handlePaste : undefined}
                 className={`w-full bg-black/40 border rounded-xl py-2.5 pl-7 pr-1 text-xs text-white focus:outline-none transition-all ${isError ? 'border-red-500/50 focus:ring-red-500/20 bg-red-900/10' : `border-white/10 ${style.focus} hover:border-white/20`}`}
-                placeholder="0.000" step="0.0001" />
+                placeholder="0.000" step="0.0001" 
+              />
             </div>
           );
         })}
@@ -133,15 +159,15 @@ export const MeasurementSection: React.FC<Props> = ({
     <div className="space-y-8">
       {type === PipetteType.FIXED ? (
         <div>
-          <MeasurementInputs theme={theme} zFactor={Number(zFactor)||1} target={nomVol} tol={toleranceSystematic} idPrefix="f" values={measurementsFixed} onChange={(i, v) => onUpdate('fixed', i, v)} label="Volume Fisso (100%)" icon={<Target size={14} />} />
+          <MeasurementInputs theme={theme} zFactor={Number(zFactor)||1} target={nomVol} tol={toleranceSystematic} idPrefix="f" values={measurementsFixed} onChange={(i, v) => onUpdate('fixed', i, v)} label="Punto Unico (100%)" icon={<Target size={14} />} />
           <StatsDashboard theme={theme} data={measurementsFixed} zFactor={zFactor} targetVol={nomVol} tolSys={toleranceSystematic} tolRand={toleranceRandom} label="Volume Fisso" />
         </div>
       ) : (
         <div className="space-y-12">
           {[
-            { l: "Volume Minimo (10%)", v: measurementsVarMin, t: nomVol*0.1, id: "min", i: <ArrowDownToLine size={14}/> },
-            { l: "Volume Medio (50%)", v: measurementsVarMid, t: nomVol*0.5, id: "mid", i: <Activity size={14}/> },
-            { l: "Volume Massimo (100%)", v: measurementsVarMax, t: nomVol, id: "max", i: <ArrowUpToLine size={14}/> }
+            { l: "Punto 1: Minimo (10%)", v: measurementsVarMin, t: nomVol*0.1, id: "min", i: <ArrowDownToLine size={14}/> },
+            { l: "Punto 2: Medio (50%)", v: measurementsVarMid, t: nomVol*0.5, id: "mid", i: <Activity size={14}/> },
+            { l: "Punto 3: Massimo (100%)", v: measurementsVarMax, t: nomVol, id: "max", i: <ArrowUpToLine size={14}/> }
           ].map(s => (
             <div key={s.id} className="space-y-4">
               <MeasurementInputs theme={theme} zFactor={Number(zFactor)||1} target={s.t} tol={toleranceSystematic} idPrefix={s.id} values={s.v} onChange={(i, v) => onUpdate(s.id as any, i, v)} label={s.l} icon={s.i} />

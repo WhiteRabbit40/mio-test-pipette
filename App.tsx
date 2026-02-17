@@ -3,7 +3,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { supabase, isSupabaseConfigured } from './supabaseClient';
 import { Auth } from './components/Auth';
 import type { Session } from '@supabase/supabase-js';
-import { Beaker, Wind, Save, Settings, FileText, Gauge, Info, CheckCircle2, AlertCircle, X, Database, LogOut, Loader2, ShieldAlert, Eye, EyeOff, Download, Layers, Calendar, Thermometer, Activity, User, Plus, Upload, FileSpreadsheet, Trash2, Search, Filter, CloudRain, MapPin, Settings2, ShieldCheck, Palette, Sparkles, ChevronRight, History, Trash, Printer, Ruler, Tag, FileDown, SortAsc, SortDesc } from 'lucide-react';
+import { Beaker, Wind, Save, Settings, FileText, Gauge, Info, CheckCircle2, AlertCircle, X, Database, LogOut, Loader2, ShieldAlert, Eye, EyeOff, Download, Layers, Calendar, Thermometer, Activity, User, Plus, Upload, FileSpreadsheet, Trash2, Search, Filter, CloudRain, MapPin, Settings2, ShieldCheck, Palette, Sparkles, ChevronRight, History, Trash, Printer, Ruler, Tag, FileDown, SortAsc, SortDesc, UserPlus, Check, Scale, Copy } from 'lucide-react';
 import { CalibrationData, PipetteType, Client, StoredPipette, UiTheme } from './types';
 import { INITIAL_MEASUREMENTS_FIXED, INITIAL_MEASUREMENTS_VAR, DEFAULT_Z_FACTOR, calculateZFactor, ISO_TOLERANCES_DATA, PIPETTE_PRESETS } from './constants';
 import { InputGroup } from './components/InputGroup';
@@ -56,6 +56,7 @@ const App: React.FC = () => {
   const [selectedClientId, setSelectedClientId] = useState<string | null>(null);
   const [dbLoading, setDbLoading] = useState(false);
   const [clientSearch, setClientSearch] = useState("");
+  const [newClientName, setNewClientName] = useState("");
   const [pipetteSortOrder, setPipetteSortOrder] = useState<'asc' | 'desc'>('asc');
 
   const [notification, setNotification] = useState<{ message: string; type: 'success' | 'error'; visible: boolean } | null>(null);
@@ -67,8 +68,13 @@ const App: React.FC = () => {
     type: PipetteType.FIXED, toleranceSystematic: '', toleranceRandom: '',
     measurementsFixed: [...INITIAL_MEASUREMENTS_FIXED], measurementsVarMin: [...INITIAL_MEASUREMENTS_VAR], 
     measurementsVarMid: [...INITIAL_MEASUREMENTS_VAR], measurementsVarMax: [...INITIAL_MEASUREMENTS_VAR],
-    notes: '', pdfOptions: { includeCharts: true, colorTheme: 'default', operatorName: '', approverName: '' },
-    uiTheme: 'violet'
+    notes: '', pdfOptions: { 
+      includeCharts: true, 
+      colorTheme: 'default', 
+      operatorName: localStorage.getItem('pcal_operator') || '', 
+      approverName: '' 
+    },
+    uiTheme: 'violet', referenceBalance: localStorage.getItem('pcal_balance') || ''
   });
 
   const activeTheme = THEME_CONFIG[uiTheme];
@@ -92,6 +98,12 @@ const App: React.FC = () => {
       setData(prev => ({ ...prev, zFactor: newZ }));
     }
   }, [data.temperature, data.pressure]);
+
+  // Persistenza opzioni operatore
+  useEffect(() => {
+    if (data.pdfOptions?.operatorName) localStorage.setItem('pcal_operator', data.pdfOptions.operatorName);
+    if (data.referenceBalance) localStorage.setItem('pcal_balance', data.referenceBalance);
+  }, [data.pdfOptions?.operatorName, data.referenceBalance]);
 
   const applyIsoTolerances = () => {
     const vol = parseFloat(data.nominalVolume);
@@ -117,6 +129,20 @@ const App: React.FC = () => {
     setDbLoading(false);
   };
 
+  const handleAddClient = async () => {
+    if (!newClientName.trim()) return;
+    setDbLoading(true);
+    const { data, error } = await supabase.from('clients').insert([{ name: newClientName, user_id: session?.user.id }]).select();
+    if (!error && data) {
+      setClients(prev => [...prev, data[0]].sort((a,b) => a.name.localeCompare(b.name)));
+      setNewClientName("");
+      setNotification({ message: "Nuovo cliente aggiunto", type: 'success', visible: true });
+    } else {
+      setNotification({ message: "Errore durante l'aggiunta", type: 'error', visible: true });
+    }
+    setDbLoading(false);
+  };
+
   const fetchPipettes = async (clientId: string) => {
     setDbLoading(true);
     const { data, error } = await supabase.from('pipettes').select('*').eq('client_id', clientId).order('created_at', { ascending: false });
@@ -129,11 +155,29 @@ const App: React.FC = () => {
     fetchPipettes(id);
   };
 
-  const loadPipette = (pipette: StoredPipette) => {
-    setData(pipette.full_data);
+  const confirmClientForSaving = () => {
+    setShowDbModal(false);
+    setNotification({ message: `Cliente "${clients.find(c => c.id === selectedClientId)?.name}" attivo`, type: 'success', visible: true });
+  };
+
+  const loadPipette = (pipette: StoredPipette, isRecalibrate = false) => {
+    if (isRecalibrate) {
+      // Clona anagrafica ma pulisce misure
+      setData({
+        ...pipette.full_data,
+        testDate: new Date().toISOString().split('T')[0],
+        measurementsFixed: [...INITIAL_MEASUREMENTS_FIXED],
+        measurementsVarMin: [...INITIAL_MEASUREMENTS_VAR],
+        measurementsVarMid: [...INITIAL_MEASUREMENTS_VAR],
+        measurementsVarMax: [...INITIAL_MEASUREMENTS_VAR]
+      });
+      setNotification({ message: "Anagrafica clonata per nuova taratura", type: 'success', visible: true });
+    } else {
+      setData(pipette.full_data);
+      setNotification({ message: "Record caricato integralmente", type: 'success', visible: true });
+    }
     if (pipette.full_data.uiTheme) setUiTheme(pipette.full_data.uiTheme);
     setShowDbModal(false);
-    setNotification({ message: "Record caricato con successo", type: 'success', visible: true });
   };
 
   const deletePipette = async (id: string) => {
@@ -159,7 +203,7 @@ const App: React.FC = () => {
 
   const handleSave = async () => {
     if (!selectedClientId) { 
-      setNotification({ message: "Seleziona un cliente dall'archivio prima di salvare", type: 'error', visible: true });
+      setNotification({ message: "Seleziona un cliente prima di salvare!", type: 'error', visible: true });
       setShowDbModal(true); 
       return; 
     }
@@ -170,7 +214,7 @@ const App: React.FC = () => {
       last_calibrated: data.testDate, full_data: { ...data, uiTheme }
     }]);
     setSaveLoading(false);
-    if (!error) setNotification({ message: "Salvato nel cloud!", type: 'success', visible: true });
+    if (!error) setNotification({ message: "Certificato salvato nel cloud!", type: 'success', visible: true });
     else setNotification({ message: "Errore nel salvataggio", type: 'error', visible: true });
   };
 
@@ -248,6 +292,8 @@ const App: React.FC = () => {
     });
   };
 
+  const activeClientName = clients.find(c => c.id === selectedClientId)?.name;
+
   if (!isSupabaseConfigured) return <div className="min-h-screen bg-slate-900 flex flex-col items-center justify-center p-6 text-center">
     <ShieldAlert size={64} className="text-amber-500 mb-6" />
     <h2 className="text-2xl font-bold mb-2">Configurazione Richiesta</h2>
@@ -276,6 +322,12 @@ const App: React.FC = () => {
         </div>
         
         <div className="flex items-center gap-3">
+          {activeClientName && (
+             <div className={`flex items-center gap-2 px-3 py-1.5 ${activeTheme.bgLight} rounded-full border ${activeTheme.border} animate-in fade-in zoom-in-95`}>
+               <User size={12} className={activeTheme.accent}/>
+               <span className={`text-[9px] font-black uppercase tracking-widest ${activeTheme.accent}`}>{activeClientName}</span>
+             </div>
+          )}
           <button onClick={() => setShowLabelModal(true)} className="px-4 py-2 bg-amber-500/10 hover:bg-amber-500/20 rounded-xl text-xs font-black uppercase tracking-widest flex items-center gap-2 transition-all border border-amber-500/20 text-amber-400">
             <Tag size={14}/> Etichette
           </button>
@@ -294,7 +346,9 @@ const App: React.FC = () => {
               </div>
             )}
           </div>
-          <button onClick={() => { fetchClients(); setShowDbModal(true); }} className="px-4 py-2 bg-white/10 hover:bg-white/20 rounded-xl text-xs font-black uppercase tracking-widest flex items-center gap-2 transition-all border border-white/10"><Database size={14}/> Archivio</button>
+          <button onClick={() => { fetchClients(); setShowDbModal(true); }} className={`px-4 py-2 ${activeClientName ? `${activeTheme.bgLight} ${activeTheme.accent} border-${activeTheme.primary}` : 'bg-white/10 border-white/10 text-white'} hover:bg-white/20 rounded-xl text-xs font-black uppercase tracking-widest flex items-center gap-2 transition-all border`}>
+            <Database size={14}/> {activeClientName ? 'Cambia Cliente' : 'Seleziona Cliente'}
+          </button>
           <button onClick={() => (supabase.auth as any).signOut()} className="p-2 bg-red-500/10 text-red-400 hover:bg-red-500 hover:text-white rounded-xl transition-all border border-red-500/20"><LogOut size={16}/></button>
         </div>
       </header>
@@ -323,6 +377,10 @@ const App: React.FC = () => {
                 </div>
                 
                 <InputGroup label="Matricola (S/N)" value={data.serialNumber} onChange={(e) => setData({...data, serialNumber: e.target.value})} theme={uiTheme} />
+                
+                <InputGroup label="Operatore" placeholder="Nome Tecnico" value={data.pdfOptions?.operatorName || ''} onChange={(e) => setData({...data, pdfOptions: { ...data.pdfOptions!, operatorName: e.target.value }})} theme={uiTheme} icon={<User size={16}/>} />
+
+                <InputGroup label="Bilancia Utilizzata" placeholder="S/N Bilancia o Modello" value={data.referenceBalance || ''} onChange={(e) => setData({...data, referenceBalance: e.target.value})} theme={uiTheme} icon={<Scale size={16}/>} />
 
                 <div className="pt-4 border-t border-white/10">
                    <div className="flex items-center gap-3 px-1 mb-4">
@@ -381,9 +439,12 @@ const App: React.FC = () => {
               </section>
 
               <section className={`${activeTheme.cardBg} p-8 rounded-[40px] border ${activeTheme.border} shadow-2xl relative overflow-hidden backdrop-blur-md transition-all duration-500`}>
-                <div className="flex items-center gap-4 mb-8">
+                <div className="flex items-center gap-4 mb-4">
                   <div className={`p-3 ${activeTheme.bgLight} rounded-2xl ${activeTheme.accent}`}><Activity size={24} /></div>
-                  <h2 className="text-xl font-bold text-white tracking-tight">Rilevazioni Gravimetriche (mg)</h2>
+                  <div>
+                    <h2 className="text-xl font-bold text-white tracking-tight">Rilevazioni Gravimetriche (mg)</h2>
+                    <p className="text-[9px] text-white/30 uppercase font-black tracking-widest mt-1">Puoi incollare i dati direttamente da Excel nelle celle</p>
+                  </div>
                 </div>
                 <MeasurementSection {...data} onUpdate={(t, i, v) => {
                   const field = t === 'fixed' ? 'measurementsFixed' : t === 'min' ? 'measurementsVarMin' : t === 'mid' ? 'measurementsVarMid' : 'measurementsVarMax';
@@ -395,14 +456,19 @@ const App: React.FC = () => {
           </div>
           
           <div className="fixed bottom-6 left-0 right-0 flex justify-center z-30 px-6">
-            <div className="flex gap-4 bg-black/40 backdrop-blur-3xl p-3 rounded-[32px] border border-white/10 shadow-2xl max-w-2xl w-full">
+            <div className="flex gap-4 bg-black/40 backdrop-blur-3xl p-3 rounded-[32px] border border-white/10 shadow-2xl max-w-3xl w-full">
               <button onClick={handlePreviewToggle} className="hidden md:flex flex-1 py-4 rounded-2xl font-black text-[10px] uppercase items-center justify-center gap-2 bg-white/5 text-white hover:bg-white/10 transition-all border border-white/10">
                 {showPreview ? <><EyeOff size={16}/> Chiudi</> : <><Eye size={16}/> Anteprima</>}
               </button>
-              <button onClick={handleSave} disabled={saveLoading} className={`flex-1 ${activeTheme.bg} hover:opacity-90 py-4 rounded-2xl font-black text-[10px] uppercase flex items-center justify-center gap-2 transition-all shadow-lg ${activeTheme.shadow} text-white`}>
-                {saveLoading ? <Loader2 className="animate-spin" size={16}/> : <><Save size={16}/> Salva Cloud</>}
-              </button>
-              <button onClick={() => generatePDF({ ...data })} className={`flex-[1.2] bg-emerald-600 hover:bg-emerald-500 py-4 rounded-2xl font-black text-[10px] uppercase flex items-center justify-center gap-2 transition-all shadow-xl shadow-emerald-900/40 text-white`}>
+              
+              <div className="flex-[2] flex flex-col gap-1">
+                <button onClick={handleSave} disabled={saveLoading} className={`w-full ${activeTheme.bg} hover:opacity-90 py-4 rounded-2xl font-black text-[10px] uppercase flex items-center justify-center gap-2 transition-all shadow-lg ${activeTheme.shadow} text-white`}>
+                  {saveLoading ? <Loader2 className="animate-spin" size={16}/> : <><Save size={16}/> Salva Cloud</>}
+                </button>
+                {activeClientName && <span className="text-[8px] text-center font-black uppercase text-white/30 tracking-widest">Destinazione: {activeClientName}</span>}
+              </div>
+
+              <button onClick={() => generatePDF({ ...data, uiTheme })} className={`flex-1 bg-emerald-600 hover:bg-emerald-500 py-4 rounded-2xl font-black text-[10px] uppercase flex items-center justify-center gap-2 transition-all shadow-xl shadow-emerald-900/40 text-white`}>
                 <Download size={16}/> Scarica PDF
               </button>
             </div>
@@ -449,17 +515,39 @@ const App: React.FC = () => {
                 <h3 className="text-2xl font-bold text-white flex items-center gap-3"><Database className={activeTheme.accent}/> Archivio Tarature</h3>
                 <p className="text-[10px] text-white/40 font-black uppercase tracking-widest mt-1">Account: {session.user.email}</p>
               </div>
-              <button onClick={() => { setShowDbModal(false); setSelectedClientId(null); setStoredPipettes([]); }} className="p-3 hover:bg-white/5 rounded-full text-white/50 hover:text-white transition-all">
+              <button onClick={() => { setShowDbModal(false); }} className="p-3 hover:bg-white/5 rounded-full text-white/50 hover:text-white transition-all">
                 <X size={24} />
               </button>
             </div>
             
             <div className="flex-1 flex overflow-hidden">
-              <div className="w-1/3 border-r border-white/5 overflow-y-auto p-4 space-y-2 bg-black/20">
-                <div className="relative mb-4">
-                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-white/20" size={14} />
-                  <input type="text" placeholder="Filtra clienti..." value={clientSearch} onChange={(e) => setClientSearch(e.target.value)} className="w-full bg-white/5 border border-white/5 rounded-xl py-2 pl-9 pr-3 text-xs text-white outline-none focus:border-white/20" />
+              <div className="w-1/3 border-r border-white/5 overflow-y-auto p-4 space-y-4 bg-black/20">
+                {/* Sezione: Aggiunta Cliente */}
+                <div className="bg-white/5 border border-white/10 p-4 rounded-3xl space-y-3">
+                  <h4 className="text-[8px] font-black uppercase tracking-[0.2em] text-white/30 ml-2">Crea Nuovo Cliente</h4>
+                  <div className="flex gap-2">
+                    <input 
+                      type="text" 
+                      placeholder="Nome Azienda..." 
+                      value={newClientName} 
+                      onChange={(e) => setNewClientName(e.target.value)} 
+                      className="flex-1 bg-black/40 border border-white/10 rounded-xl py-2 px-3 text-xs text-white outline-none focus:border-white/30" 
+                    />
+                    <button onClick={handleAddClient} disabled={dbLoading || !newClientName.trim()} className={`p-2.5 ${activeTheme.bg} text-white rounded-xl transition-all shadow-lg active:scale-95 disabled:opacity-50`}>
+                      <UserPlus size={16} />
+                    </button>
+                  </div>
                 </div>
+
+                <div className="space-y-2">
+                  <h4 className="text-[8px] font-black uppercase tracking-[0.2em] text-white/30 ml-2">Cerca Cliente</h4>
+                  <div className="relative">
+                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-white/20" size={14} />
+                    <input type="text" placeholder="Filtra..." value={clientSearch} onChange={(e) => setClientSearch(e.target.value)} className="w-full bg-white/5 border border-white/10 rounded-xl py-2 pl-9 pr-3 text-xs text-white outline-none focus:border-white/30" />
+                  </div>
+                </div>
+
+                <div className="space-y-1">
                 {dbLoading && clients.length === 0 ? <Loader2 className="animate-spin mx-auto mt-10 text-white/20" /> : 
                   clients.filter(c => c.name.toLowerCase().includes(clientSearch.toLowerCase())).map(client => (
                   <button key={client.id} onClick={() => handleClientSelect(client.id)} className={`w-full text-left p-4 rounded-2xl transition-all flex items-center justify-between group ${selectedClientId === client.id ? `${activeTheme.bg} text-white shadow-lg` : 'hover:bg-white/5 text-white/60'}`}>
@@ -467,40 +555,51 @@ const App: React.FC = () => {
                     <ChevronRight size={16} className={selectedClientId === client.id ? 'text-white' : 'text-white/10 group-hover:text-white/40'} />
                   </button>
                 ))}
+                </div>
               </div>
 
-              <div className="flex-1 overflow-y-auto p-6">
+              <div className="flex-1 overflow-y-auto p-6 bg-slate-900/50">
                 {!selectedClientId ? (
                   <div className="h-full flex flex-col items-center justify-center text-center space-y-4 opacity-30">
                     <User size={48} />
-                    <p className="text-sm font-bold uppercase tracking-widest">Seleziona un cliente</p>
+                    <p className="text-sm font-bold uppercase tracking-widest">Seleziona un cliente dalla lista a sinistra</p>
                   </div>
                 ) : dbLoading ? (
                   <div className="h-full flex items-center justify-center"><Loader2 className={`animate-spin ${activeTheme.accent}`} size={32} /></div>
                 ) : (
                   <div className="flex flex-col h-full">
-                    <div className="flex justify-between items-center mb-6">
+                    {/* Pulsante di Selezione Esplicita */}
+                    <div className="bg-white/5 border border-white/10 p-6 rounded-[32px] mb-8 flex flex-col md:flex-row items-center justify-between gap-6 shadow-xl animate-in slide-in-from-top-4">
+                      <div className="text-center md:text-left">
+                        <h4 className="text-xl font-bold text-white mb-1">{clients.find(c => c.id === selectedClientId)?.name}</h4>
+                        <p className="text-[10px] text-white/40 font-black uppercase tracking-widest">Conferma per associare le tarature a questo account</p>
+                      </div>
+                      <button onClick={confirmClientForSaving} className={`px-10 py-4 ${activeTheme.bg} text-white rounded-2xl font-black text-xs uppercase tracking-[0.2em] flex items-center gap-3 transition-all hover:scale-105 shadow-xl shadow-black/40`}>
+                        <Check size={18}/> Conferma Selezione
+                      </button>
+                    </div>
+
+                    <div className="flex justify-between items-center mb-6 px-2">
                        <div className="flex items-center gap-3">
                          <h4 className="text-xs font-black uppercase tracking-[0.2em] text-white/50">Storico Strumenti ({storedPipettes.length})</h4>
                          <button 
                            onClick={() => setPipetteSortOrder(pipetteSortOrder === 'asc' ? 'desc' : 'asc')}
                            className="p-1.5 hover:bg-white/10 rounded-lg text-white/40 hover:text-white transition-all"
-                           title="Ordina per nome"
                          >
                            {pipetteSortOrder === 'asc' ? <SortAsc size={14}/> : <SortDesc size={14}/>}
                          </button>
                        </div>
                        {storedPipettes.length > 0 && (
-                         <button onClick={handlePrintClientList} className={`flex items-center gap-2 px-4 py-2 ${activeTheme.bg} text-white rounded-xl text-[10px] font-black uppercase tracking-widest shadow-lg transition-all hover:scale-105 active:scale-95`}>
+                         <button onClick={handlePrintClientList} className={`flex items-center gap-2 px-4 py-2 bg-white/10 text-white rounded-xl text-[10px] font-black uppercase tracking-widest border border-white/10 transition-all hover:bg-white/20`}>
                            <Printer size={14}/> Stampa Elenco
                          </button>
                        )}
                     </div>
 
                     {storedPipettes.length === 0 ? (
-                      <div className="flex-1 flex flex-col items-center justify-center text-center space-y-4 opacity-30">
+                      <div className="flex-1 flex flex-col items-center justify-center text-center space-y-4 opacity-30 bg-black/20 rounded-[32px]">
                         <History size={48} />
-                        <p className="text-sm font-bold uppercase tracking-widest">Nessuna taratura trovata</p>
+                        <p className="text-sm font-bold uppercase tracking-widest">Ancora nessuna taratura salvata</p>
                       </div>
                     ) : (
                       <div className="grid grid-cols-1 gap-4">
@@ -510,6 +609,7 @@ const App: React.FC = () => {
                               <div className="flex items-center gap-3 mb-1">
                                 <span className="text-xs font-black uppercase tracking-wider text-white">{pipette.manufacturer} {pipette.model}</span>
                                 <span className={`text-[8px] font-bold px-2 py-0.5 rounded-full ${activeTheme.bgLight} ${activeTheme.accent}`}>{pipette.nominal_volume}</span>
+                                {pipette.full_data.type === PipetteType.FIXED ? <span className="text-[8px] font-black text-white/20 border border-white/10 px-1.5 rounded uppercase">Fix</span> : <span className="text-[8px] font-black text-white/20 border border-white/10 px-1.5 rounded uppercase">Var</span>}
                               </div>
                               <div className="flex items-center gap-4 text-[10px] text-white/40 font-bold">
                                 <span className="flex items-center gap-1"><Info size={10}/> S/N: {pipette.serial_number}</span>
@@ -517,8 +617,9 @@ const App: React.FC = () => {
                               </div>
                             </div>
                             <div className="flex items-center gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
-                              <button onClick={() => { setData(pipette.full_data); setShowLabelModal(true); }} className="p-2 bg-amber-500/10 text-amber-500 hover:bg-amber-500 hover:text-white rounded-xl transition-all" title="Stampa Etichette"><Tag size={14}/></button>
-                              <button onClick={() => loadPipette(pipette)} className={`p-2 ${activeTheme.bg} text-white rounded-xl shadow-lg`} title="Carica"><Upload size={14}/></button>
+                              <button onClick={() => loadPipette(pipette, true)} className={`p-2 bg-emerald-500/10 text-emerald-500 hover:bg-emerald-500 hover:text-white rounded-xl transition-all`} title="Nuova taratura (Copia Anagrafica)"><Copy size={14}/></button>
+                              <button onClick={() => { setData(pipette.full_data); setShowLabelModal(true); }} className="p-2 bg-amber-500/10 text-amber-500 hover:bg-amber-500 hover:text-white rounded-xl transition-all" title="Etichette"><Tag size={14}/></button>
+                              <button onClick={() => loadPipette(pipette)} className={`p-2 ${activeTheme.bg} text-white rounded-xl shadow-lg`} title="Carica Vecchio Record"><Upload size={14}/></button>
                               <button onClick={() => deletePipette(pipette.id)} className="p-2 bg-red-500/10 text-red-400 hover:bg-red-500 hover:text-white rounded-xl transition-all" title="Elimina"><Trash size={14}/></button>
                             </div>
                           </div>

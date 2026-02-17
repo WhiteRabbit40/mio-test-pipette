@@ -130,10 +130,14 @@ const drawPdfChart = (doc: jsPDF, x: number, y: number, w: number, h: number, st
   doc.text(`Area Evidenziata: Incertezza Estesa (k=2, 95% conf.) | Linee Rosse: Limiti ISO 8655`, startX, startY + chartH + 10);
 };
 
-const drawStatsDashboard = (doc: jsPDF, curY: number, stats: CalculatedStats, targetVol: number, tolSys: number | '', tolRand: number | '', colors: ThemeColors, title: string) => {
+const drawStatsDashboard = (doc: jsPDF, curY: number, stats: CalculatedStats, targetVol: number, tolSys: number | '', tolRand: number | '', colors: ThemeColors, title: string): boolean => {
   doc.setFont('helvetica', 'bold'); doc.setFontSize(10.5); doc.setTextColor(...colors.primary); doc.text(title.toUpperCase(), 14, curY);
   const startY = curY + 4, cardW = 35, cardH = 36, gap = 2; 
   
+  const inaccuracy = stats.meanVolume - targetVol;
+  const isPassSys = tolSys === '' ? true : Math.abs(inaccuracy) <= tolSys;
+  const isPassRand = tolRand === '' ? true : stats.sd <= tolRand;
+
   const drawCard = (x: number, label: string, val: string, unit: string, tol?: number, cur?: number) => {
     doc.setFillColor(252, 252, 252); doc.setDrawColor(200, 200, 200); doc.roundedRect(x, startY, cardW, cardH, 2, 2, 'FD');
     doc.setFontSize(8.5); doc.setTextColor(60, 60, 60); doc.setFont('helvetica', 'bold');
@@ -154,13 +158,13 @@ const drawStatsDashboard = (doc: jsPDF, curY: number, stats: CalculatedStats, ta
   };
 
   drawCard(14, "Volume Medio", fmt(stats.meanVolume, 3), "µl");
-  drawCard(14 + (cardW+gap), "Errore Sist.", fmt(stats.inaccuracy, 3), "µl", Number(tolSys), stats.inaccuracy);
-  drawCard(14 + (cardW+gap)*2, "Err. Relat.", fmt(targetVol > 0 ? (stats.inaccuracy/targetVol)*100 : 0, 2), "%");
+  drawCard(14 + (cardW+gap), "Errore Sist.", fmt(inaccuracy, 3), "µl", Number(tolSys), inaccuracy);
+  drawCard(14 + (cardW+gap)*2, "Err. Relat.", fmt(targetVol > 0 ? (inaccuracy/targetVol)*100 : 0, 2), "%");
   drawCard(14 + (cardW+gap)*3, "SD (Ripet.)", fmt(stats.sd, 4), "µl", Number(tolRand), stats.sd);
   drawCard(14 + (cardW+gap)*4, "Incertezza", fmt(stats.uncertainty, 3), "µl");
 
   drawPdfChart(doc, 14, startY + cardH + 7, 183, 88, stats, targetVol, tolSys, colors);
-  return startY + cardH + 115;
+  return isPassSys && isPassRand;
 };
 
 export const generateLabelsSheetPDF = (count: number, date: string, frequencyMonths: number, themeKey: UiTheme = 'violet') => {
@@ -218,19 +222,30 @@ export const createCalibrationPDF = (data: CalibrationData, returnBlob = false):
   drawRow(curY, [{l: 'Costruttore', v: String(data.manufacturer)}, {l: 'Modello', v: String(data.model)}, {l: 'S/N', v: String(data.serialNumber)}, {l: 'Vol. Nominale', v: `${data.nominalVolume} ${data.nominalVolumeUnit}`}]);
   curY += 12;
   drawRow(curY, [{l: 'Data Test', v: String(data.testDate)}, {l: 'Temp (°C)', v: String(data.temperature)}, {l: 'Pres (hPa)', v: String(data.pressure)}, {l: 'Fattore Z', v: fmt(z, 5)}]);
+  curY += 12;
+  drawRow(curY, [{l: 'Bilancia di Riferimento', v: String(data.referenceBalance || 'Certificata ISO 17025')}, {l: 'Frequenza Taratura', v: `${data.calibrationFrequencyMonths} mesi`}]);
   curY += 26;
 
+  let allPass = true;
   if (data.type === PipetteType.FIXED) {
-    curY = drawStatsDashboard(doc, curY, calculateStats(data.measurementsFixed, z, nomVol), nomVol, data.toleranceSystematic, data.toleranceRandom, theme, "Risultati Taratura");
+    allPass = drawStatsDashboard(doc, curY, calculateStats(data.measurementsFixed, z, nomVol), nomVol, data.toleranceSystematic, data.toleranceRandom, theme, "Risultati Taratura");
   } else {
-    curY = drawStatsDashboard(doc, curY, calculateStats(data.measurementsVarMin, z, nomVol*0.1), nomVol*0.1, data.toleranceSystematic, data.toleranceRandom, theme, "Punto 1: Volume Minimo (10%)");
-    if (curY > 160) { doc.addPage(); curY = 25; }
-    curY = drawStatsDashboard(doc, curY, calculateStats(data.measurementsVarMid, z, nomVol*0.5), nomVol*0.5, data.toleranceSystematic, data.toleranceRandom, theme, "Punto 2: Volume Medio (50%)");
-    if (curY > 160) { doc.addPage(); curY = 25; }
-    curY = drawStatsDashboard(doc, curY, calculateStats(data.measurementsVarMax, z, nomVol), nomVol, data.toleranceSystematic, data.toleranceRandom, theme, "Punto 3: Volume Massimo (100%)");
+    const p1 = drawStatsDashboard(doc, curY, calculateStats(data.measurementsVarMin, z, nomVol*0.1), nomVol*0.1, data.toleranceSystematic, data.toleranceRandom, theme, "Punto 1: Volume Minimo (10%)");
+    doc.addPage(); curY = 25;
+    const p2 = drawStatsDashboard(doc, curY, calculateStats(data.measurementsVarMid, z, nomVol*0.5), nomVol*0.5, data.toleranceSystematic, data.toleranceRandom, theme, "Punto 2: Volume Medio (50%)");
+    doc.addPage(); curY = 25;
+    const p3 = drawStatsDashboard(doc, curY, calculateStats(data.measurementsVarMax, z, nomVol), nomVol, data.toleranceSystematic, data.toleranceRandom, theme, "Punto 3: Volume Massimo (100%)");
+    allPass = p1 && p2 && p3;
   }
 
-  doc.setFontSize(8.5); doc.setTextColor(100, 100, 100); doc.text("Generato con PipetteCal 2S - Conformità ISO 8655. Firma e Timbro necessari per validità legale.", 14, 285);
+  // Verdetto di Conformità
+  const verdictY = 270;
+  doc.setFillColor(allPass ? theme.success[0] : theme.fail[0], allPass ? theme.success[1] : theme.fail[1], allPass ? theme.success[2] : theme.fail[2]);
+  doc.roundedRect(14, verdictY, 183, 12, 2, 2, 'F');
+  doc.setTextColor(255, 255, 255); doc.setFontSize(11); doc.setFont('helvetica', 'bold');
+  doc.text(`VERDETTO FINALE: LO STRUMENTO RISULTA ${allPass ? 'CONFORME' : 'NON CONFORME'} AI LIMITI ISO 8655`, 105, verdictY + 7.5, { align: 'center' });
+
+  doc.setFontSize(8.5); doc.setTextColor(100, 100, 100); doc.text("Generato con PipetteCal 2S - Conformità ISO 8655. Firma e Timbro necessari per validità legale.", 14, 288);
   return returnBlob ? doc.output('bloburl') : doc.save(`cert_2S_${data.serialNumber}.pdf`);
 };
 

@@ -45,8 +45,9 @@ export interface CalibrationData {
   measurementsVarMid: (number | '')[];
   measurementsVarMax: (number | '')[];
   pdfOptions?: PdfOptions;
-  uiTheme?: UiTheme; // Added to store the visual style of the app
+  uiTheme?: UiTheme;
   notes?: string;
+  referenceBalance?: string; // Nuova tracciabilità bilancia
 }
 
 export interface CalculatedStats {
