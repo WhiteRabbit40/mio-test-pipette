@@ -47,7 +47,7 @@ export interface CalibrationData {
   pdfOptions?: PdfOptions;
   uiTheme?: UiTheme;
   notes?: string;
-  referenceBalance?: string; // Nuova tracciabilità bilancia
+  referenceBalance?: string; 
 }
 
 export interface CalculatedStats {

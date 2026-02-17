@@ -2,6 +2,7 @@
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import { CalibrationData, PipetteType, CalculatedStats, StoredPipette, UiTheme } from '../types';
+import { LOGO_BASE64 } from '../constants';
 
 const fmt = (num: number | string | undefined, decimals = 4) => {
   if (num === '' || num === undefined || isNaN(Number(num))) return '-';
@@ -34,10 +35,19 @@ const BASE_THEMES: Record<string, ThemeColors> = {
 
 const getThemeColors = (theme: string = 'violet'): ThemeColors => BASE_THEMES[theme] || BASE_THEMES.violet;
 
-const drawHeader = (doc: jsPDF, colors: ThemeColors, title: string) => {
+const drawHeader = (doc: jsPDF, colors: ThemeColors, title: string, customLogo?: string) => {
   const x = 14, y = 15;
-  doc.setFillColor(...colors.primary); doc.roundedRect(x, y, 14, 14, 3, 3, 'F');
-  doc.setTextColor(255, 255, 255); doc.setFont('helvetica', 'bold'); doc.setFontSize(11); doc.text('2S', x + 7, y + 9.5, { align: 'center' });
+  const logoUrl = customLogo || LOGO_BASE64;
+  
+  try {
+    // Dimensionamento intelligente del logo
+    doc.addImage(logoUrl, 'PNG', x, y, 16, 16, undefined, 'FAST');
+  } catch (e) {
+    // Fallback se il logo caricato ha problemi
+    doc.setFillColor(...colors.primary); 
+    doc.roundedRect(x, y, 16, 16, 3, 3, 'F');
+  }
+
   doc.setTextColor(...colors.textDark); doc.setFontSize(16); doc.setFont('helvetica', 'bold'); doc.text('STRUMENTAZIONE & SERVIZI', x + 20, y + 7);
   doc.setTextColor(...colors.textLight); doc.setFontSize(8); doc.setFont('helvetica', 'normal'); doc.text('SOLUZIONI AVANZATE PER IL LABORATORIO', x + 20, y + 12);
   doc.setTextColor(...colors.accent); doc.setFontSize(10); doc.setFont('helvetica', 'bold'); doc.text(title.toUpperCase(), 196, y + 9.5, { align: 'right' });
@@ -186,7 +196,7 @@ export const generateLabelsSheetPDF = (count: number, date: string, frequencyMon
     const col = i % labelsPerRow;
     if (i > 0 && i % labelsPerPage === 0) doc.addPage();
     const x = marginX + (col * labelW);
-    const y = marginY + (row * labelH);
+    const y = marginY + (row * marginH);
     doc.setDrawColor(230, 230, 230); doc.setLineWidth(0.05); doc.setLineDashPattern([0.5, 0.5], 0);
     doc.rect(x, y, labelW, labelH, 'S');
     doc.setLineDashPattern([], 0);
@@ -207,7 +217,7 @@ export const createCalibrationPDF = (data: CalibrationData, returnBlob = false):
   const z = Number(data.zFactor) || 1.0;
   let nomVol = parseNominal(data.nominalVolume); if (data.nominalVolumeUnit === 'ml') nomVol *= 1000;
 
-  let curY = drawHeader(doc, theme, "Certificato di Taratura");
+  let curY = drawHeader(doc, theme, "Certificato di Taratura", data.pdfOptions?.customLogoBase64);
   
   const drawRow = (y: number, fields: {l: string, v: string}[]) => {
     const w = 183 / fields.length;
@@ -229,6 +239,7 @@ export const createCalibrationPDF = (data: CalibrationData, returnBlob = false):
   let allPass = true;
   if (data.type === PipetteType.FIXED) {
     allPass = drawStatsDashboard(doc, curY, calculateStats(data.measurementsFixed, z, nomVol), nomVol, data.toleranceSystematic, data.toleranceRandom, theme, "Risultati Taratura");
+    curY = 240; 
   } else {
     const p1 = drawStatsDashboard(doc, curY, calculateStats(data.measurementsVarMin, z, nomVol*0.1), nomVol*0.1, data.toleranceSystematic, data.toleranceRandom, theme, "Punto 1: Volume Minimo (10%)");
     doc.addPage(); curY = 25;
@@ -236,9 +247,17 @@ export const createCalibrationPDF = (data: CalibrationData, returnBlob = false):
     doc.addPage(); curY = 25;
     const p3 = drawStatsDashboard(doc, curY, calculateStats(data.measurementsVarMax, z, nomVol), nomVol, data.toleranceSystematic, data.toleranceRandom, theme, "Punto 3: Volume Massimo (100%)");
     allPass = p1 && p2 && p3;
+    curY = 210;
   }
 
-  // Verdetto di Conformità
+  // Aggiunta delle Note nel PDF se presenti
+  if (data.notes && data.notes.trim() !== "") {
+    doc.setFont('helvetica', 'bold'); doc.setFontSize(9); doc.setTextColor(...theme.primary); doc.text("NOTE E OSSERVAZIONI:", 14, curY);
+    doc.setFont('helvetica', 'normal'); doc.setFontSize(8.5); doc.setTextColor(...theme.textLight);
+    const splitNotes = doc.splitTextToSize(data.notes, 183);
+    doc.text(splitNotes, 14, curY + 5);
+  }
+
   const verdictY = 270;
   doc.setFillColor(allPass ? theme.success[0] : theme.fail[0], allPass ? theme.success[1] : theme.fail[1], allPass ? theme.success[2] : theme.fail[2]);
   doc.roundedRect(14, verdictY, 183, 12, 2, 2, 'F');

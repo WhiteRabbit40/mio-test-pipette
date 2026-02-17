@@ -3,9 +3,9 @@ import React, { useState, useEffect, useRef } from 'react';
 import { supabase, isSupabaseConfigured } from './supabaseClient';
 import { Auth } from './components/Auth';
 import type { Session } from '@supabase/supabase-js';
-import { Beaker, Wind, Save, Settings, FileText, Gauge, Info, CheckCircle2, AlertCircle, X, Database, LogOut, Loader2, ShieldAlert, Eye, EyeOff, Download, Layers, Calendar, Thermometer, Activity, User, Plus, Upload, FileSpreadsheet, Trash2, Search, Filter, CloudRain, MapPin, Settings2, ShieldCheck, Palette, Sparkles, ChevronRight, History, Trash, Printer, Ruler, Tag, FileDown, SortAsc, SortDesc, UserPlus, Check, Scale, Copy } from 'lucide-react';
+import { Beaker, Wind, Save, Settings, FileText, Gauge, Info, CheckCircle2, AlertCircle, X, Database, LogOut, Loader2, ShieldAlert, Eye, EyeOff, Download, Layers, Calendar, Thermometer, Activity, User, Plus, Upload, FileSpreadsheet, Trash2, Search, Filter, CloudRain, MapPin, Settings2, ShieldCheck, Palette, Sparkles, ChevronRight, History, Trash, Printer, Ruler, Tag, FileDown, SortAsc, SortDesc, UserPlus, Check, Scale, Copy, Image as ImageIcon, MessageSquare } from 'lucide-react';
 import { CalibrationData, PipetteType, Client, StoredPipette, UiTheme } from './types';
-import { INITIAL_MEASUREMENTS_FIXED, INITIAL_MEASUREMENTS_VAR, DEFAULT_Z_FACTOR, calculateZFactor, ISO_TOLERANCES_DATA, PIPETTE_PRESETS } from './constants';
+import { INITIAL_MEASUREMENTS_FIXED, INITIAL_MEASUREMENTS_VAR, DEFAULT_Z_FACTOR, calculateZFactor, ISO_TOLERANCES_DATA, PIPETTE_PRESETS, LOGO_BASE64 } from './constants';
 import { InputGroup } from './components/InputGroup';
 import { MeasurementSection } from './components/MeasurementSection';
 import { LiveChart } from './components/LiveChart';
@@ -72,7 +72,8 @@ const App: React.FC = () => {
       includeCharts: true, 
       colorTheme: 'default', 
       operatorName: localStorage.getItem('pcal_operator') || '', 
-      approverName: '' 
+      approverName: '',
+      customLogoBase64: localStorage.getItem('pcal_custom_logo') || ''
     },
     uiTheme: 'violet', referenceBalance: localStorage.getItem('pcal_balance') || ''
   });
@@ -94,16 +95,41 @@ const App: React.FC = () => {
 
   useEffect(() => {
     if (data.temperature !== '' && data.pressure !== '') {
-      const newZ = calculateZFactor(Number(data.temperature), Number(data.pressure) * 0.1);
+      const newZ = calculateZFactor(Number(data.temperature), Number(data.pressure));
       setData(prev => ({ ...prev, zFactor: newZ }));
     }
   }, [data.temperature, data.pressure]);
 
-  // Persistenza opzioni operatore
   useEffect(() => {
     if (data.pdfOptions?.operatorName) localStorage.setItem('pcal_operator', data.pdfOptions.operatorName);
     if (data.referenceBalance) localStorage.setItem('pcal_balance', data.referenceBalance);
-  }, [data.pdfOptions?.operatorName, data.referenceBalance]);
+    if (data.pdfOptions?.customLogoBase64) localStorage.setItem('pcal_custom_logo', data.pdfOptions.customLogoBase64);
+  }, [data.pdfOptions?.operatorName, data.referenceBalance, data.pdfOptions?.customLogoBase64]);
+
+  const handleLogoUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      const reader = new FileReader();
+      reader.onloadend = () => {
+        const base64 = reader.result as string;
+        setData(prev => ({
+          ...prev,
+          pdfOptions: { ...prev.pdfOptions!, customLogoBase64: base64 }
+        }));
+        setNotification({ message: "Logo caricato con successo!", type: 'success', visible: true });
+      };
+      reader.readAsDataURL(file);
+    }
+  };
+
+  const removeCustomLogo = () => {
+    setData(prev => ({
+      ...prev,
+      pdfOptions: { ...prev.pdfOptions!, customLogoBase64: '' }
+    }));
+    localStorage.removeItem('pcal_custom_logo');
+    setNotification({ message: "Logo rimosso, ripristinato default 2S", type: 'success', visible: true });
+  };
 
   const applyIsoTolerances = () => {
     const vol = parseFloat(data.nominalVolume);
@@ -162,7 +188,6 @@ const App: React.FC = () => {
 
   const loadPipette = (pipette: StoredPipette, isRecalibrate = false) => {
     if (isRecalibrate) {
-      // Clona anagrafica ma pulisce misure
       setData({
         ...pipette.full_data,
         testDate: new Date().toISOString().split('T')[0],
@@ -312,8 +337,8 @@ const App: React.FC = () => {
 
       <header className={`p-4 ${activeTheme.headerBg} backdrop-blur-md border-b ${activeTheme.border} flex justify-between items-center shrink-0 z-20 shadow-2xl transition-all`}>
         <div className="flex items-center gap-3">
-          <div className={`p-2 rounded-xl shadow-lg transition-all duration-500 ${activeTheme.bg} ${activeTheme.shadow}`}>
-            <Beaker size={20} className="text-white" />
+          <div className={`p-1.5 rounded-lg shadow-lg transition-all duration-500 ${activeTheme.bg} ${activeTheme.shadow}`}>
+            <img src={data.pdfOptions?.customLogoBase64 || LOGO_BASE64} className="w-8 h-8 object-contain" alt="Logo" />
           </div>
           <div>
             <h1 className="text-lg font-bold leading-none tracking-tight">PipetteCal</h1>
@@ -324,7 +349,6 @@ const App: React.FC = () => {
         <div className="flex items-center gap-3">
           {activeClientName && (
              <div className={`flex items-center gap-2 px-3 py-1.5 ${activeTheme.bgLight} rounded-full border ${activeTheme.border} animate-in fade-in zoom-in-95`}>
-               <User size={12} className={activeTheme.accent}/>
                <span className={`text-[9px] font-black uppercase tracking-widest ${activeTheme.accent}`}>{activeClientName}</span>
              </div>
           )}
@@ -358,6 +382,28 @@ const App: React.FC = () => {
           <div className="max-w-[1400px] mx-auto grid grid-cols-1 md:grid-cols-12 gap-8 pb-32">
             
             <aside className="md:col-span-4 lg:col-span-4 space-y-6">
+              <div className="flex items-center gap-3 px-1">
+                <div className={`p-2 ${activeTheme.bgLight} rounded-lg ${activeTheme.accent}`}><Settings2 size={16}/></div>
+                <h2 className="text-[10px] font-black text-white/50 uppercase tracking-[0.2em]">Configurazione & Logo</h2>
+              </div>
+
+              <div className={`${activeTheme.cardBg} p-6 rounded-[32px] border ${activeTheme.border} space-y-4 shadow-xl backdrop-blur-md`}>
+                <div className="flex items-center gap-4">
+                  <div className="relative w-16 h-16 bg-black/40 rounded-2xl border border-white/10 flex items-center justify-center overflow-hidden">
+                    <img src={data.pdfOptions?.customLogoBase64 || LOGO_BASE64} className="max-w-full max-h-full object-contain" alt="Current Logo" />
+                  </div>
+                  <div className="flex-1 space-y-2">
+                    <label className="block w-full cursor-pointer bg-white/5 hover:bg-white/10 border border-white/10 rounded-xl py-2 px-3 text-[10px] font-black uppercase text-center transition-all">
+                      <ImageIcon size={14} className="inline mr-2 mb-0.5" /> Carica Logo
+                      <input type="file" className="hidden" accept="image/*" onChange={handleLogoUpload} />
+                    </label>
+                    {data.pdfOptions?.customLogoBase64 && (
+                      <button onClick={removeCustomLogo} className="w-full text-[8px] font-black text-red-400 uppercase tracking-widest hover:text-red-300">Rimuovi personalizzato</button>
+                    )}
+                  </div>
+                </div>
+              </div>
+
               <div className="flex items-center gap-3 px-1">
                 <div className={`p-2 ${activeTheme.bgLight} rounded-lg ${activeTheme.accent}`}><Info size={16}/></div>
                 <h2 className="text-[10px] font-black text-white/50 uppercase tracking-[0.2em]">Anagrafica Strumento</h2>
@@ -410,6 +456,19 @@ const App: React.FC = () => {
                   >
                     <ShieldCheck size={14}/> Applica Limiti ISO 8655
                   </button>
+                </div>
+
+                <div className="pt-4 border-t border-white/10">
+                   <div className="flex items-center gap-3 px-1 mb-4">
+                    <div className={`p-2 ${activeTheme.bgLight} rounded-lg ${activeTheme.accent}`}><MessageSquare size={14}/></div>
+                    <h2 className="text-[10px] font-black text-white/50 uppercase tracking-[0.2em]">Note Aggiuntive</h2>
+                  </div>
+                  <textarea 
+                    value={data.notes || ''} 
+                    onChange={(e) => setData({...data, notes: e.target.value})}
+                    placeholder="Inserisci osservazioni o dettagli tecnici..."
+                    className="w-full bg-black/20 border border-white/10 rounded-2xl p-4 text-xs text-white placeholder-white/20 focus:outline-none focus:ring-4 focus:ring-violet-500/30 focus:border-violet-500 transition-all min-h-[100px] resize-none"
+                  />
                 </div>
               </div>
             </aside>
@@ -522,7 +581,6 @@ const App: React.FC = () => {
             
             <div className="flex-1 flex overflow-hidden">
               <div className="w-1/3 border-r border-white/5 overflow-y-auto p-4 space-y-4 bg-black/20">
-                {/* Sezione: Aggiunta Cliente */}
                 <div className="bg-white/5 border border-white/10 p-4 rounded-3xl space-y-3">
                   <h4 className="text-[8px] font-black uppercase tracking-[0.2em] text-white/30 ml-2">Crea Nuovo Cliente</h4>
                   <div className="flex gap-2">
@@ -568,7 +626,6 @@ const App: React.FC = () => {
                   <div className="h-full flex items-center justify-center"><Loader2 className={`animate-spin ${activeTheme.accent}`} size={32} /></div>
                 ) : (
                   <div className="flex flex-col h-full">
-                    {/* Pulsante di Selezione Esplicita */}
                     <div className="bg-white/5 border border-white/10 p-6 rounded-[32px] mb-8 flex flex-col md:flex-row items-center justify-between gap-6 shadow-xl animate-in slide-in-from-top-4">
                       <div className="text-center md:text-left">
                         <h4 className="text-xl font-bold text-white mb-1">{clients.find(c => c.id === selectedClientId)?.name}</h4>
